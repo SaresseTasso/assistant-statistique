@@ -2611,20 +2611,27 @@ else:
 # 10.5 Contrôle des variables quantitatives
 # ---------------------
 
+
 # ============================================================
-# 11. CODIFICATION DES QUESTIONS OUVERTES
+# 11. CODIFICATION AUTOMATIQUE DES QUESTIONS OUVERTES
 # ============================================================
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans
+
 
 st.subheader("11. Codification des questions ouvertes")
 
 st.write(
-    "Ce module permet de transformer les réponses ouvertes "
-    "en catégories thématiques. Les réponses originales sont "
-    "conservées et la codification reste validable par l'utilisateur."
+    "L'application analyse les réponses ouvertes, recherche "
+    "les réponses lexicalement similaires et propose des "
+    "regroupements thématiques. Les propositions doivent "
+    "être vérifiées et validées par l'utilisateur."
 )
 
+
 # ------------------------------------------------------------
-# 11.1 Sélection des questions ouvertes
+# 11.1 Recherche des questions ouvertes
 # ------------------------------------------------------------
 
 variables_ouvertes = (
@@ -2634,6 +2641,7 @@ variables_ouvertes = (
         ] == "Question ouverte"
     ]["Variable"].tolist()
 )
+
 
 if not variables_ouvertes:
 
@@ -2647,7 +2655,7 @@ else:
     variable_ouverte = st.selectbox(
         "Sélectionnez une question ouverte",
         variables_ouvertes,
-        key="variable_question_ouverte"
+        key="variable_question_ouverte_auto"
     )
 
     serie_ouverte = (
@@ -2664,15 +2672,18 @@ else:
     ]
 
     st.write(
-        f"**Nombre de réponses renseignées : "
+        f"**Nombre de réponses exploitables : "
         f"{len(serie_ouverte)}**"
     )
 
+
     # --------------------------------------------------------
-    # 11.2 Liste des réponses
+    # 11.2 Affichage des réponses
     # --------------------------------------------------------
 
-    st.markdown("### 11.1 Réponses originales")
+    st.markdown(
+        "### 11.1 Réponses originales"
+    )
 
     reponses_originales = pd.DataFrame({
         "Réponse originale":
@@ -2685,19 +2696,16 @@ else:
         hide_index=True
     )
 
+
     # --------------------------------------------------------
     # 11.3 Normalisation
     # --------------------------------------------------------
 
-    st.markdown("### 11.2 Normalisation des réponses")
-
-    st.write(
-        "La normalisation sert uniquement à faciliter "
-        "le regroupement des réponses. La réponse originale "
-        "reste conservée."
+    st.markdown(
+        "### 11.2 Préparation automatique du texte"
     )
 
-    def normaliser_texte(texte):
+    def normaliser_texte_auto(texte):
 
         texte = str(texte)
 
@@ -2715,30 +2723,31 @@ else:
 
         return texte
 
+
     codification = pd.DataFrame({
+
         "Réponse originale":
             serie_ouverte.values
+
     })
 
-    codification["Réponse normalisée"] = (
+
+    codification[
+        "Réponse normalisée"
+    ] = (
         codification[
             "Réponse originale"
         ]
-        .apply(normaliser_texte)
+        .apply(normaliser_texte_auto)
     )
 
-    st.dataframe(
-        codification,
-        use_container_width=True,
-        hide_index=True
-    )
 
     # --------------------------------------------------------
-    # 11.4 Réponses non informatives
+    # 11.4 Détection des réponses non informatives
     # --------------------------------------------------------
 
     st.markdown(
-        "### 11.3 Réponses non informatives à vérifier"
+        "### 11.3 Réponses à vérifier"
     )
 
     reponses_non_informatives = [
@@ -2756,15 +2765,8 @@ else:
     ]
 
     codification[
-        "Réponse normalisée"
+        "À vérifier"
     ] = (
-        codification[
-            "Réponse normalisée"
-        ]
-        .astype(str)
-    )
-
-    codification["À vérifier"] = (
         codification[
             "Réponse normalisée"
         ].isin(
@@ -2772,18 +2774,18 @@ else:
         )
     )
 
-    nb_non_informatives = int(
+    nombre_non_informatives = int(
         codification[
             "À vérifier"
         ].sum()
     )
 
-    if nb_non_informatives > 0:
+    if nombre_non_informatives > 0:
 
         st.warning(
-            f"{nb_non_informatives} réponse(s) "
-            "semblent non informatives et doivent être "
-            "vérifiées manuellement."
+            f"{nombre_non_informatives} réponse(s) "
+            "ont été identifiées comme potentiellement "
+            "non informatives."
         )
 
         st.dataframe(
@@ -2801,296 +2803,458 @@ else:
             "n'a été détectée."
         )
 
-    # --------------------------------------------------------
-    # 11.5 Fréquence des réponses exactes
-    # --------------------------------------------------------
-
-    st.markdown(
-        "### 11.4 Fréquence des réponses similaires"
-    )
-
-    frequences = (
-        codification[
-            "Réponse normalisée"
-        ]
-        .value_counts()
-        .reset_index()
-    )
-
-    frequences.columns = [
-        "Réponse normalisée",
-        "Effectif"
-    ]
-
-    frequences["Pourcentage"] = (
-        frequences["Effectif"]
-        / len(codification)
-        * 100
-    ).round(2)
-
-    st.dataframe(
-        frequences,
-        use_container_width=True,
-        hide_index=True
-    )
 
     # --------------------------------------------------------
-    # 11.6 Création des thèmes
+    # 11.5 Paramètres de l'analyse automatique
     # --------------------------------------------------------
 
     st.markdown(
-        "### 11.5 Création des thèmes"
+        "### 11.4 Proposition automatique de thèmes"
     )
 
-    st.write(
-        "Créez les catégories qui serviront à regrouper "
-        "les réponses. Exemple : « Manque de financement », "
-        "« Manque de formation », « Accès au marché »."
-    )
+    nombre_reponses = len(codification)
 
-    if (
-        "themes_ouverts"
-        not in st.session_state
-    ):
+    if nombre_reponses < 4:
 
-        st.session_state[
-            "themes_ouverts"
-        ] = []
+        st.warning(
+            "Il faut au moins 4 réponses pour proposer "
+            "automatiquement des regroupements."
+        )
 
-    nouveau_theme = st.text_input(
-        "Nom du nouveau thème",
-        key="nouveau_theme"
-    )
+    else:
 
-    if st.button(
-        "Ajouter le thème",
-        key="ajouter_theme"
-    ):
+        nombre_max_themes = min(
+            8,
+            nombre_reponses
+        )
 
-        theme = nouveau_theme.strip()
+        nombre_themes = st.slider(
+            "Nombre de thèmes à proposer",
+            min_value=2,
+            max_value=nombre_max_themes,
+            value=min(
+                4,
+                nombre_max_themes
+            ),
+            key="nombre_themes_auto"
+        )
 
-        if theme == "":
+
+        # ----------------------------------------------------
+        # 11.6 Exclusion des réponses non informatives
+        # ----------------------------------------------------
+
+        donnees_clustering = codification[
+            ~codification["À vérifier"]
+        ].copy()
+
+        if len(donnees_clustering) < 3:
 
             st.warning(
-                "Veuillez saisir un nom de thème."
-            )
-
-        elif theme in st.session_state[
-            "themes_ouverts"
-        ]:
-
-            st.warning(
-                "Ce thème existe déjà."
+                "Il ne reste pas suffisamment de réponses "
+                "informatives pour effectuer une proposition "
+                "automatique."
             )
 
         else:
 
-            st.session_state[
-                "themes_ouverts"
-            ].append(theme)
+            textes = donnees_clustering[
+                "Réponse normalisée"
+            ].tolist()
 
-            st.success(
-                f"Thème « {theme} » ajouté."
-            )
 
-            st.rerun()
+            # ------------------------------------------------
+            # TF-IDF
+            # ------------------------------------------------
 
-    themes = st.session_state[
-        "themes_ouverts"
-    ]
+            try:
 
-    if themes:
-
-        st.markdown("#### Thèmes disponibles")
-
-        for i, theme in enumerate(
-            themes,
-            start=1
-        ):
-
-            st.write(
-                f"{i}. {theme}"
-            )
-
-    else:
-
-        st.info(
-            "Aucun thème n'a encore été créé."
-        )
-
-    # --------------------------------------------------------
-    # 11.7 Codification manuelle
-    # --------------------------------------------------------
-
-    if themes:
-
-        st.markdown(
-            "### 11.6 Attribution des thèmes"
-        )
-
-        st.write(
-            "Attribuez un thème à chaque réponse. "
-            "L'option « Non codée » permet de laisser "
-            "une réponse en attente."
-        )
-
-        options_themes = [
-            "Non codée"
-        ] + themes
-
-        codification["Thème"] = "Non codée"
-
-        for index in codification.index:
-
-            reponse = codification.loc[
-                index,
-                "Réponse originale"
-            ]
-
-            choix = st.selectbox(
-                f"Réponse {index + 1} : {reponse}",
-                options_themes,
-                key=f"theme_reponse_{variable_ouverte}_{index}"
-            )
-
-            codification.loc[
-                index,
-                "Thème"
-            ] = choix
-
-        st.markdown(
-            "### 11.7 Résultats de la codification"
-        )
-
-        resultat_themes = (
-            codification[
-                codification["Thème"]
-                != "Non codée"
-            ]["Thème"]
-            .value_counts()
-            .reset_index()
-        )
-
-        resultat_themes.columns = [
-            "Thème",
-            "Effectif"
-        ]
-
-        if len(codification) > 0:
-
-            resultat_themes["Pourcentage"] = (
-                resultat_themes["Effectif"]
-                / len(codification)
-                * 100
-            ).round(2)
-
-        st.dataframe(
-            resultat_themes,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        # ----------------------------------------------------
-        # 11.8 Vérification de la couverture
-        # ----------------------------------------------------
-
-        nb_codees = int(
-            (
-                codification["Thème"]
-                != "Non codée"
-            ).sum()
-        )
-
-        nb_non_codees = (
-            len(codification)
-            - nb_codees
-        )
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-            st.metric(
-                "Réponses",
-                len(codification)
-            )
-
-        with c2:
-            st.metric(
-                "Réponses codées",
-                nb_codees
-            )
-
-        with c3:
-            st.metric(
-                "Non codées",
-                nb_non_codees
-            )
-
-        if nb_non_codees == 0:
-
-            st.success(
-                "Toutes les réponses ont reçu un thème."
-            )
-
-        else:
-
-            st.warning(
-                f"{nb_non_codees} réponse(s) restent "
-                "à coder."
-            )
-
-        # ----------------------------------------------------
-        # 11.9 Export de la codification
-        # ----------------------------------------------------
-
-        st.markdown(
-            "### 11.8 Export de la codification"
-        )
-
-        try:
-
-            buffer_codification = io.BytesIO()
-
-            with pd.ExcelWriter(
-                buffer_codification,
-                engine="openpyxl"
-            ) as writer:
-
-                codification.to_excel(
-                    writer,
-                    index=False,
-                    sheet_name="Codification"
+                vectoriseur = TfidfVectorizer(
+                    lowercase=True,
+                    strip_accents="unicode",
+                    stop_words=None,
+                    min_df=1,
+                    max_df=0.95,
+                    ngram_range=(1, 2)
                 )
 
-                resultat_themes.to_excel(
-                    writer,
-                    index=False,
-                    sheet_name="Résultats"
+                matrice_tfidf = (
+                    vectoriseur
+                    .fit_transform(textes)
                 )
 
-            st.download_button(
-                label="Télécharger la codification Excel",
-                data=buffer_codification.getvalue(),
-                file_name=(
-                    "codification_question_ouverte.xlsx"
-                ),
-                mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet"
-                ),
-                key="telecharger_codification"
-            )
 
-        except Exception as e:
+                # --------------------------------------------
+                # Vérification du nombre de caractéristiques
+                # --------------------------------------------
 
-            st.error(
-                f"Erreur lors de la préparation "
-                f"du fichier : {e}"
-            )
+                if matrice_tfidf.shape[1] < 2:
 
-    else:
+                    st.warning(
+                        "Les réponses sont trop similaires "
+                        "ou trop courtes pour effectuer "
+                        "un regroupement automatique."
+                    )
 
-        st.info(
-            "Créez au moins un thème pour commencer "
-            "la codification."
-        )
+                else:
+
+                    nombre_clusters = min(
+                        nombre_themes,
+                        len(textes)
+                    )
+
+
+                    # ----------------------------------------
+                    # K-Means
+                    # ----------------------------------------
+
+                    modele = KMeans(
+                        n_clusters=nombre_clusters,
+                        random_state=42,
+                        n_init=10
+                    )
+
+                    labels = modele.fit_predict(
+                        matrice_tfidf
+                    )
+
+
+                    donnees_clustering[
+                        "Groupe automatique"
+                    ] = labels + 1
+
+
+                    # ----------------------------------------
+                    # Recherche des mots représentatifs
+                    # ----------------------------------------
+
+                    noms_themes = {}
+
+                    termes = np.array(
+                        vectoriseur
+                        .get_feature_names_out()
+                    )
+
+                    centres = modele.cluster_centers_
+
+
+                    for cluster_num in range(
+                        nombre_clusters
+                    ):
+
+                        indices = (
+                            centres[
+                                cluster_num
+                            ]
+                            .argsort()[::-1]
+                        )
+
+                        mots = []
+
+                        for indice in indices:
+
+                            mot = termes[indice]
+
+                            if mot not in mots:
+
+                                mots.append(
+                                    mot
+                                )
+
+                            if len(mots) >= 3:
+                                break
+
+
+                        nom_propose = (
+                            " / ".join(mots)
+                            if mots
+                            else
+                            f"Thème {cluster_num + 1}"
+                        )
+
+                        noms_themes[
+                            cluster_num + 1
+                        ] = nom_propose
+
+
+                    # ----------------------------------------
+                    # Attribution des noms
+                    # ----------------------------------------
+
+                    donnees_clustering[
+                        "Thème proposé"
+                    ] = (
+                        donnees_clustering[
+                            "Groupe automatique"
+                        ]
+                        .map(noms_themes)
+                    )
+
+
+                    # ----------------------------------------
+                    # Résultats
+                    # ----------------------------------------
+
+                    st.markdown(
+                        "### 11.5 Thèmes proposés"
+                    )
+
+                    resume_themes = (
+                        donnees_clustering[
+                            "Thème proposé"
+                        ]
+                        .value_counts()
+                        .reset_index()
+                    )
+
+                    resume_themes.columns = [
+                        "Thème proposé",
+                        "Effectif"
+                    ]
+
+                    resume_themes[
+                        "Pourcentage"
+                    ] = (
+                        resume_themes[
+                            "Effectif"
+                        ]
+                        / len(codification)
+                        * 100
+                    ).round(2)
+
+
+                    st.dataframe(
+                        resume_themes,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+
+                    st.info(
+                        "Les thèmes proposés sont basés sur la "
+                        "similarité lexicale des réponses. Ils ne "
+                        "constituent pas une interprétation automatique "
+                        "définitive du sens des réponses."
+                    )
+
+
+                    # ----------------------------------------
+                    # Réponses par thème
+                    # ----------------------------------------
+
+                    st.markdown(
+                        "### 11.6 Réponses regroupées"
+                    )
+
+                    for theme in noms_themes.values():
+
+                        st.markdown(
+                            f"#### {theme}"
+                        )
+
+                        reponses_theme = (
+                            donnees_clustering[
+                                donnees_clustering[
+                                    "Thème proposé"
+                                ] == theme
+                            ][
+                                [
+                                    "Réponse originale"
+                                ]
+                            ]
+                        )
+
+                        st.dataframe(
+                            reponses_theme,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+
+                    # ----------------------------------------
+                    # 11.7 Validation des thèmes
+                    # ----------------------------------------
+
+                    st.markdown(
+                        "### 11.7 Validation des thèmes proposés"
+                    )
+
+                    st.write(
+                        "Vous pouvez remplacer les noms proposés "
+                        "par des intitulés plus pertinents pour "
+                        "votre étude."
+                    )
+
+                    themes_valides = {}
+
+                    for groupe, nom_propose in (
+                        noms_themes.items()
+                    ):
+
+                        nom_valide = st.text_input(
+                            f"Nom du thème {groupe}",
+                            value=nom_propose,
+                            key=(
+                                f"nom_theme_valide_"
+                                f"{variable_ouverte}_"
+                                f"{groupe}"
+                            )
+                        )
+
+                        themes_valides[
+                            groupe
+                        ] = nom_valide
+
+
+                    # ----------------------------------------
+                    # 11.8 Application des noms validés
+                    # ----------------------------------------
+
+                    donnees_clustering[
+                        "Thème validé"
+                    ] = (
+                        donnees_clustering[
+                            "Groupe automatique"
+                        ]
+                        .map(themes_valides)
+                    )
+
+
+                    # ----------------------------------------
+                    # 11.9 Tableau final
+                    # ----------------------------------------
+
+                    st.markdown(
+                        "### 11.8 Codification proposée"
+                    )
+
+                    resultat_final = (
+                        donnees_clustering[
+                            [
+                                "Réponse originale",
+                                "Réponse normalisée",
+                                "Thème proposé",
+                                "Thème validé"
+                            ]
+                        ]
+                    )
+
+                    st.dataframe(
+                        resultat_final,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+
+                    # ----------------------------------------
+                    # 11.10 Résultats des thèmes validés
+                    # ----------------------------------------
+
+                    st.markdown(
+                        "### 11.9 Résultats statistiques"
+                    )
+
+                    statistiques_themes = (
+                        donnees_clustering[
+                            "Thème validé"
+                        ]
+                        .value_counts()
+                        .reset_index()
+                    )
+
+                    statistiques_themes.columns = [
+                        "Thème",
+                        "Effectif"
+                    ]
+
+                    statistiques_themes[
+                        "Pourcentage"
+                    ] = (
+                        statistiques_themes[
+                            "Effectif"
+                        ]
+                        / len(codification)
+                        * 100
+                    ).round(2)
+
+
+                    st.dataframe(
+                        statistiques_themes,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+
+                    st.bar_chart(
+                        statistiques_themes.set_index(
+                            "Thème"
+                        )["Effectif"]
+                    )
+
+
+                    # ----------------------------------------
+                    # 11.11 Export Excel
+                    # ----------------------------------------
+
+                    st.markdown(
+                        "### 11.10 Export de la codification"
+                    )
+
+                    try:
+
+                        buffer_auto = io.BytesIO()
+
+                        with pd.ExcelWriter(
+                            buffer_auto,
+                            engine="openpyxl"
+                        ) as writer:
+
+                            resultat_final.to_excel(
+                                writer,
+                                index=False,
+                                sheet_name="Codification"
+                            )
+
+                            statistiques_themes.to_excel(
+                                writer,
+                                index=False,
+                                sheet_name="Résultats"
+                            )
+
+                            resume_themes.to_excel(
+                                writer,
+                                index=False,
+                                sheet_name="Propositions"
+                            )
+
+                        st.download_button(
+                            label=(
+                                "Télécharger la codification "
+                                "automatique Excel"
+                            ),
+                            data=buffer_auto.getvalue(),
+                            file_name=(
+                                "codification_automatique.xlsx"
+                            ),
+                            mime=(
+                                "application/vnd.openxmlformats-officedocument."
+                                "spreadsheetml.sheet"
+                            ),
+                            key=(
+                                "telecharger_codification_auto"
+                            )
+                        )
+
+                    except Exception as e:
+
+                        st.error(
+                            "Erreur lors de la préparation "
+                            f"du fichier : {e}"
+                        )
+
+            except Exception as e:
+
+                st.error(
+                    "La proposition automatique des thèmes "
+                    f"a rencontré une erreur : {e}"
+                )
