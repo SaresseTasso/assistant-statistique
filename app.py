@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import re
 
 # ============================================================
-# CONFIGURATION DE LA PAGE
+# CONFIGURATION
 # ============================================================
 
 st.set_page_config(
@@ -11,18 +13,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# ============================================================
-# TITRE
-# ============================================================
-
 st.title("Assistant statistique")
-
 st.write(
-    "Importez votre fichier de données pour commencer l'analyse."
+    "Analysez vos fichiers Excel ou CSV : diagnostic, "
+    "dictionnaire, fréquences et statistiques descriptives."
 )
 
 # ============================================================
-# IMPORTATION DU FICHIER
+# IMPORTATION
 # ============================================================
 
 fichier = st.file_uploader(
@@ -30,490 +28,558 @@ fichier = st.file_uploader(
     type=["xlsx", "csv"]
 )
 
-if fichier is not None:
+if fichier is None:
+    st.info("Veuillez importer un fichier Excel ou CSV.")
+    st.stop()
 
-    # ========================================================
-    # LECTURE DU FICHIER
-    # ========================================================
+# ============================================================
+# LECTURE
+# ============================================================
 
-    try:
-
-        if fichier.name.endswith(".xlsx"):
-            df = pd.read_excel(fichier)
-
-        else:
-            df = pd.read_csv(fichier)
-
-        st.success(
-            f"Fichier chargé avec succès : {fichier.name}"
-        )
-
-    except Exception as e:
-
-        st.error(
-            f"Une erreur est survenue lors de la lecture du fichier : {e}"
-        )
-
-        st.stop()
-
-    # ========================================================
-    # INFORMATIONS GÉNÉRALES
-    # ========================================================
-
-    st.subheader("Informations générales")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-
-        st.metric(
-            "Nombre de lignes",
-            df.shape[0]
-        )
-
-    with col2:
-
-        st.metric(
-            "Nombre de variables",
-            df.shape[1]
-        )
-
-    with col3:
-
-        st.metric(
-            "Nombre de doublons",
-            df.duplicated().sum()
-        )
-
-    # ========================================================
-    # APERÇU DES DONNÉES
-    # ========================================================
-
-    st.subheader("Aperçu des données")
-
-    st.dataframe(
-        df.head(20),
-        use_container_width=True
-    )
-
-    # ========================================================
-    # DIAGNOSTIC DES VARIABLES
-    # ========================================================
-
-    st.subheader("Diagnostic des variables")
-
-    diagnostic = pd.DataFrame({
-
-        "Variable": df.columns,
-
-        "Type Python": [
-            str(df[col].dtype)
-            for col in df.columns
-        ],
-
-        "Valeurs manquantes": [
-            df[col].isna().sum()
-            for col in df.columns
-        ],
-
-        "Valeurs uniques": [
-            df[col].nunique(dropna=True)
-            for col in df.columns
-        ]
-    })
-
-    st.dataframe(
-        diagnostic,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # ========================================================
-    # VALEURS MANQUANTES
-    # ========================================================
-
-    st.subheader("Valeurs manquantes")
-
-    manquants = pd.DataFrame({
-
-        "Variable": df.columns,
-
-        "Effectif manquant": [
-            df[col].isna().sum()
-            for col in df.columns
-        ],
-
-        "Pourcentage manquant": [
-            round(
-                df[col].isna().mean() * 100,
-                2
-            )
-            for col in df.columns
-        ]
-    })
-
-    st.dataframe(
-        manquants,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # ========================================================
-    # DOUBLONS
-    # ========================================================
-
-    st.subheader("Doublons")
-
-    nombre_doublons = df.duplicated().sum()
-
-    if nombre_doublons == 0:
-
-        st.success(
-            "Aucun doublon détecté."
-        )
-
+try:
+    if fichier.name.lower().endswith(".xlsx"):
+        df = pd.read_excel(fichier)
     else:
+        df = pd.read_csv(fichier)
 
-        st.warning(
-            f"{nombre_doublons} doublon(s) détecté(s)."
-        )
+except Exception as e:
+    st.error(f"Erreur lors de la lecture du fichier : {e}")
+    st.stop()
 
-    # ========================================================
-    # FONCTION DE PROPOSITION DU TYPE
-    # ========================================================
+st.success(f"Fichier chargé : {fichier.name}")
 
-    def proposer_type(colonne):
+# ============================================================
+# INFORMATIONS GÉNÉRALES
+# ============================================================
 
-        serie = df[colonne]
+st.subheader("1. Informations générales")
 
-        # Détection des dates
-        if pd.api.types.is_datetime64_any_dtype(serie):
+col1, col2, col3, col4 = st.columns(4)
 
-            return "Date"
+with col1:
+    st.metric("Lignes", df.shape[0])
 
-        # Détection des variables numériques
-        if pd.api.types.is_numeric_dtype(serie):
+with col2:
+    st.metric("Variables", df.shape[1])
 
-            return "Quantitative"
+with col3:
+    st.metric("Doublons", df.duplicated().sum())
 
-        # Sinon : qualitative
-        return "Qualitative"
+with col4:
+    st.metric(
+        "Cellules manquantes",
+        int(df.isna().sum().sum())
+    )
 
-    # ========================================================
-    # TYPES DISPONIBLES
-    # ========================================================
+# ============================================================
+# APERÇU
+# ============================================================
 
-    types_possibles = [
-        "Qualitative",
-        "Qualitative codée",
+st.subheader("2. Aperçu des données")
+
+st.dataframe(
+    df.head(20),
+    use_container_width=True,
+    hide_index=True
+)
+
+# ============================================================
+# DIAGNOSTIC
+# ============================================================
+
+st.subheader("3. Diagnostic des variables")
+
+diagnostic = pd.DataFrame({
+    "Variable": df.columns,
+    "Type Python": [
+        str(df[col].dtype)
+        for col in df.columns
+    ],
+    "Valeurs manquantes": [
+        int(df[col].isna().sum())
+        for col in df.columns
+    ],
+    "% manquant": [
+        round(df[col].isna().mean() * 100, 2)
+        for col in df.columns
+    ],
+    "Valeurs uniques": [
+        int(df[col].nunique(dropna=True))
+        for col in df.columns
+    ]
+})
+
+st.dataframe(
+    diagnostic,
+    use_container_width=True,
+    hide_index=True
+)
+
+# ============================================================
+# DOUBLONS
+# ============================================================
+
+if df.duplicated().sum() > 0:
+    st.warning(
+        f"{df.duplicated().sum()} doublon(s) détecté(s)."
+    )
+else:
+    st.success("Aucun doublon détecté.")
+
+# ============================================================
+# FONCTION DE PROPOSITION DU TYPE
+# ============================================================
+
+def proposer_type(colonne):
+
+    serie = df[colonne]
+
+    if pd.api.types.is_datetime64_any_dtype(serie):
+        return "Date"
+
+    if pd.api.types.is_numeric_dtype(serie):
+        return "Quantitative"
+
+    return "Qualitative"
+
+
+# ============================================================
+# TYPES
+# ============================================================
+
+types_analyse = [
+    "Qualitative",
+    "Qualitative codée",
+    "Quantitative",
+    "Date",
+    "Identifiant",
+    "À vérifier"
+]
+
+types_questions = [
+    "Question fermée",
+    "Question ouverte",
+    "Réponses multiples",
+    "Non applicable"
+]
+
+# ============================================================
+# DICTIONNAIRE
+# ============================================================
+
+dictionnaire = pd.DataFrame({
+    "Variable": df.columns,
+
+    "Type Python": [
+        str(df[col].dtype)
+        for col in df.columns
+    ],
+
+    "Nombre de modalités": [
+        int(df[col].nunique(dropna=True))
+        for col in df.columns
+    ],
+
+    "Valeurs manquantes": [
+        int(df[col].isna().sum())
+        for col in df.columns
+    ]
+})
+
+dictionnaire["Type d'analyse"] = [
+    proposer_type(col)
+    for col in df.columns
+]
+
+dictionnaire["Type de question"] = [
+    "Non applicable"
+    if proposer_type(col) in [
         "Quantitative",
-        "Date",
-        "Identifiant",
-        "À vérifier"
+        "Date"
     ]
+    else "Question fermée"
+    for col in df.columns
+]
 
-    types_questions = [
-        "Question fermée",
-        "Question ouverte",
-        "Réponses multiples",
-        "Non applicable"
-    ]
+# ============================================================
+# INITIALISATION SESSION
+# ============================================================
 
-    # ========================================================
-    # CONSTRUCTION DU DICTIONNAIRE
-    # ========================================================
+colonnes_requises = [
+    "Variable",
+    "Type Python",
+    "Nombre de modalités",
+    "Valeurs manquantes",
+    "Type d'analyse",
+    "Type de question"
+]
 
-    dictionnaire = pd.DataFrame({
-
-        "Variable": df.columns,
-
-        "Type Python": [
-            str(df[col].dtype)
-            for col in df.columns
-        ],
-
-        "Nombre de modalités": [
-            df[col].nunique(dropna=True)
-            for col in df.columns
-        ],
-
-        "Valeurs manquantes": [
-            df[col].isna().sum()
-            for col in df.columns
-        ]
-    })
-
-    # Type d'analyse proposé automatiquement
-
-    dictionnaire["Type d'analyse"] = [
-        proposer_type(col)
-        for col in df.columns
-    ]
-
-    # Type de question proposé automatiquement
-
-    dictionnaire["Type de question"] = [
-
-        "Non applicable"
-        if proposer_type(col) in [
-            "Quantitative",
-            "Date"
-        ]
-        else "Question fermée"
-
-        for col in df.columns
-    ]
-
-    # ========================================================
-    # INITIALISATION DU DICTIONNAIRE
-    # ========================================================
-
-    colonnes_requises = [
-        "Variable",
-        "Type Python",
-        "Nombre de modalités",
-        "Valeurs manquantes",
-        "Type d'analyse",
-        "Type de question"
-    ]
-
-    # Si le dictionnaire n'existe pas
-    # ou si sa structure est ancienne,
-    # on le reconstruit.
-
-    if (
-        "dictionnaire_modifie" not in st.session_state
-        or
-        not all(
-            colonne in st.session_state[
-                "dictionnaire_modifie"
-            ].columns
-            for colonne in colonnes_requises
-        )
-        or
-        len(
-            st.session_state[
-                "dictionnaire_modifie"
-            ]
-        ) != len(df.columns)
-    ):
-
+if (
+    "dictionnaire_modifie" not in st.session_state
+    or
+    not all(
+        col in st.session_state[
+            "dictionnaire_modifie"
+        ].columns
+        for col in colonnes_requises
+    )
+    or
+    len(
         st.session_state[
             "dictionnaire_modifie"
-        ] = dictionnaire.copy()
-
-    # ========================================================
-    # DICTIONNAIRE DES VARIABLES
-    # ========================================================
-
-    st.subheader(
-        "Dictionnaire des variables"
-    )
-
-    dictionnaire_modifie = st.data_editor(
-
-        st.session_state[
-            "dictionnaire_modifie"
-        ],
-
-        column_config={
-
-            "Type d'analyse":
-                st.column_config.SelectboxColumn(
-                    "Type d'analyse",
-                    options=types_possibles
-                ),
-
-            "Type de question":
-                st.column_config.SelectboxColumn(
-                    "Type de question",
-                    options=types_questions
-                )
-        },
-
-        disabled=[
-            "Variable",
-            "Type Python",
-            "Nombre de modalités",
-            "Valeurs manquantes"
-        ],
-
-        use_container_width=True,
-
-        hide_index=True
-    )
-
-    # Sauvegarde des modifications
+        ]
+    ) != len(df.columns)
+):
 
     st.session_state[
         "dictionnaire_modifie"
-    ] = dictionnaire_modifie
+    ] = dictionnaire.copy()
+
+# ============================================================
+# ÉDITION DU DICTIONNAIRE
+# ============================================================
+
+st.subheader("4. Dictionnaire des variables")
+
+dictionnaire_modifie = st.data_editor(
+    st.session_state[
+        "dictionnaire_modifie"
+    ],
+
+    column_config={
+
+        "Type d'analyse":
+            st.column_config.SelectboxColumn(
+                "Type d'analyse",
+                options=types_analyse
+            ),
+
+        "Type de question":
+            st.column_config.SelectboxColumn(
+                "Type de question",
+                options=types_questions
+            )
+    },
+
+    disabled=[
+        "Variable",
+        "Type Python",
+        "Nombre de modalités",
+        "Valeurs manquantes"
+    ],
+
+    use_container_width=True,
+    hide_index=True
+)
+
+st.session_state[
+    "dictionnaire_modifie"
+] = dictionnaire_modifie
+
+# ============================================================
+# ANALYSE QUALITATIVE
+# ============================================================
+
+st.subheader("5. Analyse des variables qualitatives")
+
+types_qualitatifs = [
+    "Qualitative",
+    "Qualitative codée"
+]
+
+for _, ligne in dictionnaire_modifie.iterrows():
+
+    variable = ligne["Variable"]
+    type_analyse = ligne["Type d'analyse"]
+    type_question = ligne["Type de question"]
 
     # ========================================================
-    # INFORMATION
+    # QUESTIONS FERMÉES
     # ========================================================
 
-    st.info(
-        "Vérifiez le type d'analyse et le type de question "
-        "de chaque variable avant de poursuivre."
-    )
+    if (
+        type_analyse in types_qualitatifs
+        and type_question == "Question fermée"
+    ):
+
+        st.markdown(f"### {variable}")
+
+        serie = df[variable]
+
+        valide = serie.dropna()
+
+        effectifs = valide.value_counts()
+
+        pourcentages = (
+            valide.value_counts(
+                normalize=True
+            ) * 100
+        )
+
+        resultat = pd.DataFrame({
+            "Modalité":
+                effectifs.index.astype(str),
+
+            "Effectif":
+                effectifs.values,
+
+            "Pourcentage":
+                pourcentages.values.round(2)
+        })
+
+        st.dataframe(
+            resultat,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.caption(
+            f"Réponses valides : {len(valide)} | "
+            f"Manquantes : {serie.isna().sum()} | "
+            f"Total : {len(serie)}"
+        )
+
+        st.bar_chart(
+            resultat.set_index("Modalité")["Effectif"]
+        )
 
     # ========================================================
-    # ANALYSE DES VARIABLES QUALITATIVES
+    # QUESTIONS OUVERTES
     # ========================================================
 
-    st.subheader(
-        "Analyse des variables qualitatives"
-    )
+    elif (
+        type_analyse in types_qualitatifs
+        and type_question == "Question ouverte"
+    ):
 
-    types_qualitatifs = [
-        "Qualitative",
-        "Qualitative codée"
-    ]
+        st.markdown(f"### {variable}")
+
+        serie = df[variable].dropna().astype(str)
+
+        st.write(
+            f"**Nombre de réponses : {len(serie)}**"
+        )
+
+        # Affichage des réponses
+        apercu = pd.DataFrame({
+            "Réponses": serie.head(20).values
+        })
+
+        st.dataframe(
+            apercu,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.info(
+            "Cette variable est ouverte. "
+            "Elle sera soumise au module de codification."
+        )
 
     # ========================================================
-    # PARCOURS DES VARIABLES
+    # RÉPONSES MULTIPLES
     # ========================================================
 
-    for _, ligne in dictionnaire_modifie.iterrows():
+    elif (
+        type_analyse in types_qualitatifs
+        and type_question == "Réponses multiples"
+    ):
 
-        variable = ligne["Variable"]
+        st.markdown(f"### {variable}")
 
-        type_analyse = ligne["Type d'analyse"]
+        serie = df[variable].dropna().astype(str)
 
-        type_question = ligne["Type de question"]
+        # ----------------------------------------------------
+        # Séparation des réponses
+        # ----------------------------------------------------
 
-        # ====================================================
-        # QUESTION FERMÉE
-        # ====================================================
+        reponses = []
 
-        if (
-            type_analyse in types_qualitatifs
-            and
-            type_question == "Question fermée"
-        ):
+        for valeur in serie:
 
-            st.markdown(
-                f"### {variable}"
+            morceaux = re.split(
+                r"[,;|]",
+                valeur
             )
 
-            serie = df[variable]
+            for morceau in morceaux:
 
-            # ------------------------------------------------
-            # INFORMATIONS SUR LES RÉPONSES
-            # ------------------------------------------------
+                morceau = morceau.strip()
 
-            nombre_total = len(serie)
+                if morceau:
+                    reponses.append(morceau)
 
-            nombre_valides = serie.notna().sum()
+        if reponses:
 
-            nombre_manquantes = serie.isna().sum()
+            freq = pd.Series(
+                reponses
+            ).value_counts()
 
-            # ------------------------------------------------
-            # EFFECTIFS
-            # ------------------------------------------------
-
-            effectifs = serie.dropna().value_counts()
-
-            # ------------------------------------------------
-            # POURCENTAGES
-            #
-            # Les pourcentages sont calculés uniquement
-            # sur les réponses valides.
-            # ------------------------------------------------
-
-            pourcentages = (
-                serie.dropna().value_counts(
-                    normalize=True
-                ) * 100
+            pourcentage = (
+                freq / len(serie) * 100
             )
 
-            # ------------------------------------------------
-            # TABLEAU DES RÉSULTATS
-            # ------------------------------------------------
+            resultat_multiple = pd.DataFrame({
 
-            resultat = pd.DataFrame({
+                "Réponse":
+                    freq.index,
 
-                "Modalité":
-                    effectifs.index.astype(str),
+                "Nombre de citations":
+                    freq.values,
 
-                "Effectif":
-                    effectifs.values,
-
-                "Pourcentage":
-                    pourcentages.values.round(2)
+                "% des répondants":
+                    pourcentage.round(2).values
             })
 
-            # ------------------------------------------------
-            # AFFICHAGE DU TABLEAU
-            # ------------------------------------------------
-
             st.dataframe(
-                resultat,
+                resultat_multiple,
                 use_container_width=True,
                 hide_index=True
             )
 
-            # ------------------------------------------------
-            # INFORMATIONS COMPLÉMENTAIRES
-            # ------------------------------------------------
-
             st.caption(
-                f"Réponses valides : {nombre_valides} | "
-                f"Réponses manquantes : {nombre_manquantes} | "
-                f"Total : {nombre_total}"
+                "Les pourcentages peuvent dépasser 100 % au total "
+                "car un répondant peut avoir plusieurs réponses."
             )
 
-            # ------------------------------------------------
-            # GRAPHIQUE
-            # ------------------------------------------------
+        else:
 
-            graphique = resultat.set_index(
-                "Modalité"
-            )["Effectif"]
-
-            st.bar_chart(
-                graphique
+            st.warning(
+                "Aucune réponse multiple exploitable détectée."
             )
 
-        # ====================================================
-        # QUESTION OUVERTE
-        # ====================================================
+# ============================================================
+# ANALYSE QUANTITATIVE
+# ============================================================
 
-        elif (
-            type_analyse in types_qualitatifs
-            and
-            type_question == "Question ouverte"
-        ):
+st.subheader("6. Analyse des variables quantitatives")
 
-            st.markdown(
-                f"### {variable}"
+for _, ligne in dictionnaire_modifie.iterrows():
+
+    variable = ligne["Variable"]
+
+    type_analyse = ligne["Type d'analyse"]
+
+    if type_analyse == "Quantitative":
+
+        st.markdown(f"### {variable}")
+
+        serie = pd.to_numeric(
+            df[variable],
+            errors="coerce"
+        ).dropna()
+
+        if len(serie) == 0:
+
+            st.warning(
+                "Aucune valeur numérique exploitable."
             )
 
-            st.info(
-                "Cette variable est identifiée comme "
-                "question ouverte. Elle sera traitée "
-                "dans le module de codification des "
-                "réponses ouvertes."
-            )
+            continue
 
-        # ====================================================
-        # RÉPONSES MULTIPLES
-        # ====================================================
+        statistiques = pd.DataFrame({
 
-        elif (
-            type_analyse in types_qualitatifs
-            and
-            type_question == "Réponses multiples"
-        ):
+            "Indicateur": [
+                "Effectif valide",
+                "Valeurs manquantes",
+                "Moyenne",
+                "Médiane",
+                "Écart-type",
+                "Minimum",
+                "Q1",
+                "Q3",
+                "Maximum"
+            ],
 
-            st.markdown(
-                f"### {variable}"
-            )
+            "Valeur": [
 
-            st.info(
-                "Cette variable est identifiée comme "
-                "question à réponses multiples. "
-                "Elle sera traitée dans le module "
-                "d'analyse des réponses multiples."
-            )
+                len(serie),
+
+                df[variable].isna().sum(),
+
+                round(serie.mean(), 2),
+
+                round(serie.median(), 2),
+
+                round(serie.std(), 2),
+
+                round(serie.min(), 2),
+
+                round(serie.quantile(0.25), 2),
+
+                round(serie.quantile(0.75), 2),
+
+                round(serie.max(), 2)
+            ]
+        })
+
+        st.dataframe(
+            statistiques,
+            use_container_width=True,
+            hide_index=True
+        )
+
+# ============================================================
+# RÉSUMÉ FINAL DU DIAGNOSTIC
+# ============================================================
+
+st.subheader("7. Résumé du diagnostic")
+
+nb_qualitatives = len(
+    dictionnaire_modifie[
+        dictionnaire_modifie["Type d'analyse"].isin(
+            types_qualitatifs
+        )
+    ]
+)
+
+nb_quantitatives = len(
+    dictionnaire_modifie[
+        dictionnaire_modifie["Type d'analyse"]
+        == "Quantitative"
+    ]
+)
+
+nb_dates = len(
+    dictionnaire_modifie[
+        dictionnaire_modifie["Type d'analyse"]
+        == "Date"
+    ]
+)
+
+nb_identifiants = len(
+    dictionnaire_modifie[
+        dictionnaire_modifie["Type d'analyse"]
+        == "Identifiant"
+    ]
+)
+
+c1, c2, c3, c4 = st.columns(4)
+
+with c1:
+    st.metric(
+        "Variables qualitatives",
+        nb_qualitatives
+    )
+
+with c2:
+    st.metric(
+        "Variables quantitatives",
+        nb_quantitatives
+    )
+
+with c3:
+    st.metric(
+        "Variables de date",
+        nb_dates
+    )
+
+with c4:
+    st.metric(
+        "Identifiants",
+        nb_identifiants
+    )
+
+st.success(
+    "Analyse descriptive terminée."
+)
