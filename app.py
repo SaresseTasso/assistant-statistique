@@ -3259,3 +3259,530 @@ else:
                     "La proposition automatique des thèmes "
                     f"a rencontré une erreur : {e}"
                 )
+# ============================================================
+# 12. INTERPRÉTATION STATISTIQUE STRUCTURÉE
+# ============================================================
+
+st.subheader("12. Interprétation statistique structurée")
+
+st.write(
+    "Ce module transforme les résultats statistiques en "
+    "interprétations structurées. Le système tient compte "
+    "du nombre de modalités, des proportions observées et "
+    "des relations entre les résultats."
+)
+
+
+# ============================================================
+# 12.1 FONCTIONS UTILITAIRES
+# ============================================================
+
+def formater_pourcentage(valeur):
+    return f"{valeur:.1f} %"
+
+
+def formater_effectif(valeur):
+    return f"{int(valeur)}"
+
+
+def choisir_modalites_a_interpreter(
+    tableau,
+    colonne_pourcentage="Pourcentage"
+):
+    """
+    Détermine le nombre de modalités à interpréter.
+
+    2 à 5 modalités :
+        toutes les modalités
+
+    6 à 10 modalités :
+        3 premières modalités
+
+    Plus de 10 modalités :
+        5 premières modalités
+    """
+
+    nombre_modalites = len(tableau)
+
+    if nombre_modalites <= 5:
+
+        nombre_a_retenir = nombre_modalites
+
+    elif nombre_modalites <= 10:
+
+        nombre_a_retenir = 3
+
+    else:
+
+        nombre_a_retenir = 5
+
+    return tableau.head(
+        nombre_a_retenir
+    )
+
+
+def construire_phrase_modalite(
+    modalite,
+    effectif,
+    pourcentage,
+    position,
+    total_modalites
+):
+
+    modalite = str(modalite)
+
+    pourcentage_texte = formater_pourcentage(
+        pourcentage
+    )
+
+    effectif_texte = formater_effectif(
+        effectif
+    )
+
+    if position == 0:
+
+        return (
+            f"la modalité « {modalite} » est la plus "
+            f"représentée, avec {effectif_texte} réponse(s), "
+            f"soit {pourcentage_texte}"
+        )
+
+    elif position == 1:
+
+        return (
+            f"elle est suivie par la modalité "
+            f"« {modalite} », qui représente "
+            f"{effectif_texte} réponse(s), soit "
+            f"{pourcentage_texte}"
+        )
+
+    elif position == 2:
+
+        return (
+            f"vient ensuite la modalité "
+            f"« {modalite} », avec "
+            f"{effectif_texte} réponse(s), soit "
+            f"{pourcentage_texte}"
+        )
+
+    else:
+
+        return (
+            f"la modalité « {modalite} » représente "
+            f"{effectif_texte} réponse(s), soit "
+            f"{pourcentage_texte}"
+        )
+
+
+def generer_interpretation_qualitative(
+    variable,
+    serie
+):
+
+    serie = serie.dropna()
+
+    if len(serie) == 0:
+
+        return None
+
+    effectifs = (
+        serie
+        .value_counts()
+    )
+
+    pourcentages = (
+        serie
+        .value_counts(
+            normalize=True
+        )
+        * 100
+    )
+
+    tableau = pd.DataFrame({
+
+        "Modalité":
+            effectifs.index.astype(str),
+
+        "Effectif":
+            effectifs.values,
+
+        "Pourcentage":
+            pourcentages.values
+
+    })
+
+    nombre_modalites = len(tableau)
+
+    modalites_selectionnees = (
+        choisir_modalites_a_interpreter(
+            tableau
+        )
+    )
+
+    phrases = []
+
+    for position, (_, ligne) in enumerate(
+        modalites_selectionnees.iterrows()
+    ):
+
+        phrase = construire_phrase_modalite(
+
+            ligne["Modalité"],
+
+            ligne["Effectif"],
+
+            ligne["Pourcentage"],
+
+            position,
+
+            nombre_modalites
+        )
+
+        phrases.append(
+            phrase
+        )
+
+    if nombre_modalites == 1:
+
+        interpretation = (
+            f"Les résultats relatifs à « {variable} » "
+            f"montrent que {phrases[0]}."
+        )
+
+    elif nombre_modalites <= 5:
+
+        interpretation = (
+            f"La répartition des répondants selon "
+            f"« {variable} » montre que "
+            f"{phrases[0]}. "
+        )
+
+        if len(phrases) > 1:
+
+            interpretation += (
+                "Par ailleurs, "
+                + ". ".join(
+                    phrase.capitalize()
+                    for phrase in phrases[1:]
+                )
+                + "."
+            )
+
+        interpretation += (
+            " Dans l'ensemble, ces résultats décrivent "
+            "la répartition des répondants selon "
+            f"« {variable} »."
+        )
+
+    else:
+
+        interpretation = (
+            f"L'analyse de « {variable} » montre que "
+            f"{phrases[0]}. "
+        )
+
+        if len(phrases) > 1:
+
+            interpretation += (
+                "Elle est suivie par "
+                + ". ".join(
+                    phrase.replace(
+                        "elle est suivie par ",
+                        ""
+                    )
+                    for phrase in phrases[1:]
+                )
+                + "."
+            )
+
+        modalites_non_selectionnees = (
+            nombre_modalites
+            - len(modalites_selectionnees)
+        )
+
+        if modalites_non_selectionnees > 0:
+
+            interpretation += (
+                f" Les {modalites_non_selectionnees} "
+                f"autre(s) modalité(s) sont moins représentées "
+                "dans l'échantillon."
+            )
+
+        interpretation += (
+            " Globalement, la répartition est donc "
+            "principalement concentrée sur les modalités "
+            "présentées ci-dessus."
+        )
+
+    return {
+        "tableau": tableau,
+        "interpretation": interpretation
+    }
+
+
+# ============================================================
+# 12.2 VARIABLES QUALITATIVES
+# ============================================================
+
+st.markdown(
+    "### 12.1 Interprétation des variables qualitatives"
+)
+
+interpretations_qualitatives = []
+
+for _, ligne in dictionnaire_modifie.iterrows():
+
+    variable = ligne["Variable"]
+
+    type_analyse = ligne[
+        "Type d'analyse"
+    ]
+
+    type_question = ligne[
+        "Type de question"
+    ]
+
+    if (
+        type_analyse in types_qualitatifs
+        and
+        type_question == "Question fermée"
+    ):
+
+        resultat = (
+            generer_interpretation_qualitative(
+                variable,
+                df_nettoye[variable]
+            )
+        )
+
+        if resultat is None:
+            continue
+
+        st.markdown(
+            f"#### {variable}"
+        )
+
+        st.dataframe(
+            resultat["tableau"].round(2),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.write(
+            resultat["interpretation"]
+        )
+
+        interpretations_qualitatives.append({
+
+            "Type": "Variable qualitative",
+
+            "Variable": variable,
+
+            "Interprétation":
+                resultat["interpretation"]
+
+        })
+
+
+# ============================================================
+# 12.3 VARIABLES QUANTITATIVES
+# ============================================================
+
+st.markdown(
+    "### 12.2 Interprétation des variables quantitatives"
+)
+
+interpretations_quantitatives = []
+
+for _, ligne in dictionnaire_modifie.iterrows():
+
+    variable = ligne["Variable"]
+
+    if ligne["Type d'analyse"] != "Quantitative":
+        continue
+
+    serie = pd.to_numeric(
+        df_nettoye[variable],
+        errors="coerce"
+    ).dropna()
+
+    if len(serie) == 0:
+        continue
+
+    effectif = len(serie)
+
+    moyenne = serie.mean()
+    mediane = serie.median()
+    ecart_type = serie.std()
+    minimum = serie.min()
+    q1 = serie.quantile(0.25)
+    q3 = serie.quantile(0.75)
+    maximum = serie.max()
+
+    interpretation = (
+        f"L'analyse de « {variable} » porte sur "
+        f"{effectif} observation(s) valides. "
+        f"La moyenne est de {moyenne:.2f}, tandis que "
+        f"la médiane est de {mediane:.2f}. "
+        f"L'écart-type s'établit à {ecart_type:.2f}. "
+        f"Les valeurs observées s'étendent de "
+        f"{minimum:.2f} à {maximum:.2f}. "
+        f"Par ailleurs, 50 % des observations se situent "
+        f"entre {q1:.2f} et {q3:.2f}."
+    )
+
+    st.markdown(
+        f"#### {variable}"
+    )
+
+    st.write(
+        interpretation
+    )
+
+    interpretations_quantitatives.append({
+
+        "Type": "Variable quantitative",
+
+        "Variable": variable,
+
+        "Interprétation":
+            interpretation
+
+    })
+
+
+# ============================================================
+# 12.4 QUESTIONS OUVERTES CODÉES
+# ============================================================
+
+st.markdown(
+    "### 12.3 Interprétation des questions ouvertes codées"
+)
+
+if (
+    "themes_ouverts"
+    in st.session_state
+    and
+    len(
+        st.session_state["themes_ouverts"]
+    ) > 0
+):
+
+    st.info(
+        "Les interprétations des questions ouvertes "
+        "seront intégrées après validation de leur codification."
+    )
+
+else:
+
+    st.info(
+        "Aucune codification thématique validée n'est "
+        "actuellement disponible."
+    )
+
+
+# ============================================================
+# 12.5 SYNTHÈSE DES INTERPRÉTATIONS
+# ============================================================
+
+st.markdown(
+    "### 12.4 Synthèse des interprétations"
+)
+
+toutes_interpretations = (
+    interpretations_qualitatives
+    +
+    interpretations_quantitatives
+)
+
+if toutes_interpretations:
+
+    tableau_interpretations = pd.DataFrame(
+        toutes_interpretations
+    )
+
+    st.dataframe(
+        tableau_interpretations,
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "Aucune interprétation automatique disponible."
+    )
+
+
+# ============================================================
+# 12.6 EXPORT DES INTERPRÉTATIONS
+# ============================================================
+
+if toutes_interpretations:
+
+    st.markdown(
+        "### 12.5 Export des interprétations"
+    )
+
+    try:
+
+        buffer_interpretations = io.BytesIO()
+
+        with pd.ExcelWriter(
+            buffer_interpretations,
+            engine="openpyxl"
+        ) as writer:
+
+            tableau_interpretations.to_excel(
+                writer,
+                index=False,
+                sheet_name="Interprétations"
+            )
+
+        st.download_button(
+
+            label=(
+                "Télécharger les interprétations Excel"
+            ),
+
+            data=(
+                buffer_interpretations
+                .getvalue()
+            ),
+
+            file_name=(
+                "interpretations_statistiques.xlsx"
+            ),
+
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+
+            key=(
+                "telecharger_interpretations"
+            )
+        )
+
+    except Exception as e:
+
+        st.error(
+            "Erreur lors de la préparation "
+            f"du fichier : {e}"
+        )
+
+
+# ============================================================
+# 12.7 RAPPEL MÉTHODOLOGIQUE
+# ============================================================
+
+st.markdown(
+    "### 12.6 Rappel méthodologique"
+)
+
+st.warning(
+    "Les interprétations générées sont fondées sur les "
+    "statistiques descriptives calculées à partir des données. "
+    "Elles doivent être relues et contextualisées avant "
+    "leur intégration dans un rapport scientifique."
+)
