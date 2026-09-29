@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -28,7 +29,7 @@ st.title("Assistant statistique")
 
 st.write(
     "Analysez vos fichiers Excel ou CSV : diagnostic, "
-    "dictionnaire, fréquences, statistiques descriptives "
+    "dictionnaire, nettoyage, statistiques descriptives "
     "et analyses bivariées."
 )
 
@@ -58,6 +59,25 @@ except Exception as e:
 st.success(f"Fichier chargé : {fichier.name}")
 
 # ============================================================
+# INITIALISATION DES DONNEES NETTOYEES
+# ============================================================
+
+# On conserve toujours une copie des données originales.
+# Toutes les corrections sont appliquées sur df_nettoye.
+
+if (
+    "nom_fichier_actuel" not in st.session_state
+    or
+    st.session_state["nom_fichier_actuel"] != fichier.name
+):
+
+    st.session_state["nom_fichier_actuel"] = fichier.name
+    st.session_state["df_nettoye"] = df.copy()
+    st.session_state["dictionnaire_modifie"] = None
+
+df_nettoye = st.session_state["df_nettoye"]
+
+# ============================================================
 # INFORMATIONS GENERALES
 # ============================================================
 
@@ -72,7 +92,10 @@ with col2:
     st.metric("Variables", df.shape[1])
 
 with col3:
-    st.metric("Doublons", df.duplicated().sum())
+    st.metric(
+        "Doublons",
+        int(df.duplicated().sum())
+    )
 
 with col4:
     st.metric(
@@ -81,7 +104,7 @@ with col4:
     )
 
 # ============================================================
-# APERCU
+# APERCU DES DONNEES
 # ============================================================
 
 st.subheader("2. Aperçu des données")
@@ -93,25 +116,32 @@ st.dataframe(
 )
 
 # ============================================================
-# DIAGNOSTIC
+# DIAGNOSTIC DES VARIABLES
 # ============================================================
 
 st.subheader("3. Diagnostic des variables")
 
 diagnostic = pd.DataFrame({
     "Variable": df.columns,
+
     "Type Python": [
         str(df[col].dtype)
         for col in df.columns
     ],
+
     "Valeurs manquantes": [
         int(df[col].isna().sum())
         for col in df.columns
     ],
+
     "% manquant": [
-        round(df[col].isna().mean() * 100, 2)
+        round(
+            df[col].isna().mean() * 100,
+            2
+        )
         for col in df.columns
     ],
+
     "Valeurs uniques": [
         int(df[col].nunique(dropna=True))
         for col in df.columns
@@ -132,7 +162,7 @@ else:
     st.success("Aucun doublon détecté.")
 
 # ============================================================
-# PROPOSITION DU TYPE
+# FONCTION DE PROPOSITION DU TYPE
 # ============================================================
 
 def proposer_type(colonne):
@@ -165,7 +195,7 @@ types_questions = [
 ]
 
 # ============================================================
-# DICTIONNAIRE
+# DICTIONNAIRE DES VARIABLES
 # ============================================================
 
 dictionnaire = pd.DataFrame({
@@ -212,26 +242,24 @@ colonnes_requises = [
     "Type de question"
 ]
 
+# Si aucun dictionnaire n'existe ou si le fichier a changé,
+# on recrée le dictionnaire.
+
 if (
-    "dictionnaire_modifie" not in st.session_state
+    st.session_state["dictionnaire_modifie"] is None
     or
     not all(
-        col in st.session_state[
-            "dictionnaire_modifie"
-        ].columns
+        col in st.session_state["dictionnaire_modifie"].columns
         for col in colonnes_requises
     )
     or
-    len(
-        st.session_state[
-            "dictionnaire_modifie"
-        ]
-    ) != len(df.columns)
+    len(st.session_state["dictionnaire_modifie"])
+    != len(df.columns)
 ):
 
-    st.session_state[
-        "dictionnaire_modifie"
-    ] = dictionnaire.copy()
+    st.session_state["dictionnaire_modifie"] = (
+        dictionnaire.copy()
+    )
 
 # ============================================================
 # EDITION DU DICTIONNAIRE
@@ -240,9 +268,7 @@ if (
 st.subheader("4. Dictionnaire des variables")
 
 dictionnaire_modifie = st.data_editor(
-    st.session_state[
-        "dictionnaire_modifie"
-    ],
+    st.session_state["dictionnaire_modifie"],
 
     column_config={
 
@@ -275,7 +301,7 @@ st.session_state[
 ] = dictionnaire_modifie
 
 # ============================================================
-# ANALYSE QUALITATIVE
+# ANALYSE DES VARIABLES QUALITATIVES
 # ============================================================
 
 st.subheader(
@@ -290,14 +316,8 @@ types_qualitatifs = [
 for _, ligne in dictionnaire_modifie.iterrows():
 
     variable = ligne["Variable"]
-
-    type_analyse = ligne[
-        "Type d'analyse"
-    ]
-
-    type_question = ligne[
-        "Type de question"
-    ]
+    type_analyse = ligne["Type d'analyse"]
+    type_question = ligne["Type de question"]
 
     # --------------------------------------------------------
     # QUESTION FERMEE
@@ -313,9 +333,17 @@ for _, ligne in dictionnaire_modifie.iterrows():
             f"### {variable}"
         )
 
-        serie = df[variable]
+        serie = df_nettoye[variable]
 
         valide = serie.dropna()
+
+        if len(valide) == 0:
+
+            st.warning(
+                "Aucune réponse exploitable."
+            )
+
+            continue
 
         effectifs = valide.value_counts()
 
@@ -370,7 +398,7 @@ for _, ligne in dictionnaire_modifie.iterrows():
         )
 
         serie = (
-            df[variable]
+            df_nettoye[variable]
             .dropna()
             .astype(str)
         )
@@ -392,7 +420,7 @@ for _, ligne in dictionnaire_modifie.iterrows():
 
         st.info(
             "Cette variable est ouverte. "
-            "Elle sera traitée dans le futur module "
+            "Elle sera traitée dans le module "
             "de codification thématique."
         )
 
@@ -411,7 +439,7 @@ for _, ligne in dictionnaire_modifie.iterrows():
         )
 
         serie = (
-            df[variable]
+            df_nettoye[variable]
             .dropna()
             .astype(str)
         )
@@ -437,9 +465,7 @@ for _, ligne in dictionnaire_modifie.iterrows():
         if reponses:
 
             freq = (
-                pd.Series(
-                    reponses
-                )
+                pd.Series(reponses)
                 .value_counts()
             )
 
@@ -456,9 +482,7 @@ for _, ligne in dictionnaire_modifie.iterrows():
                     freq.values,
 
                 "% des répondants":
-                    pourcentage.round(
-                        2
-                    ).values
+                    pourcentage.round(2).values
             })
 
             st.dataframe(
@@ -476,12 +500,11 @@ for _, ligne in dictionnaire_modifie.iterrows():
         else:
 
             st.warning(
-                "Aucune réponse multiple exploitable "
-                "détectée."
+                "Aucune réponse multiple exploitable détectée."
             )
 
 # ============================================================
-# ANALYSE QUANTITATIVE
+# ANALYSE DES VARIABLES QUANTITATIVES
 # ============================================================
 
 st.subheader(
@@ -492,18 +515,14 @@ for _, ligne in dictionnaire_modifie.iterrows():
 
     variable = ligne["Variable"]
 
-    type_analyse = ligne[
-        "Type d'analyse"
-    ]
-
-    if type_analyse == "Quantitative":
+    if ligne["Type d'analyse"] == "Quantitative":
 
         st.markdown(
             f"### {variable}"
         )
 
         serie = pd.to_numeric(
-            df[variable],
+            df_nettoye[variable],
             errors="coerce"
         ).dropna()
 
@@ -534,7 +553,11 @@ for _, ligne in dictionnaire_modifie.iterrows():
 
                 len(serie),
 
-                df[variable].isna().sum(),
+                int(
+                    df_nettoye[
+                        variable
+                    ].isna().sum()
+                ),
 
                 round(
                     serie.mean(),
@@ -646,11 +669,772 @@ with c4:
     )
 
 # ============================================================
+# NETTOYAGE DES DONNEES
+# ============================================================
+
+st.subheader(
+    "8. Nettoyage des données"
+)
+
+st.write(
+    "Les données originales restent conservées. "
+    "Les corrections sont appliquées uniquement "
+    "sur une copie de travail."
+)
+
+# ------------------------------------------------------------
+# ETAT ACTUEL
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.1 État actuel des données"
+)
+
+c1, c2, c3, c4 = st.columns(4)
+
+with c1:
+    st.metric(
+        "Lignes",
+        df_nettoye.shape[0]
+    )
+
+with c2:
+    st.metric(
+        "Variables",
+        df_nettoye.shape[1]
+    )
+
+with c3:
+    st.metric(
+        "Cellules manquantes",
+        int(
+            df_nettoye.isna()
+            .sum()
+            .sum()
+        )
+    )
+
+with c4:
+    st.metric(
+        "Doublons",
+        int(
+            df_nettoye.duplicated()
+            .sum()
+        )
+    )
+
+# ------------------------------------------------------------
+# VALEURS MANQUANTES
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.2 Valeurs manquantes"
+)
+
+manquants = pd.DataFrame({
+
+    "Variable":
+        df_nettoye.columns,
+
+    "Valeurs manquantes": [
+        int(
+            df_nettoye[col]
+            .isna()
+            .sum()
+        )
+        for col in df_nettoye.columns
+    ],
+
+    "% manquant": [
+        round(
+            df_nettoye[col]
+            .isna()
+            .mean() * 100,
+            2
+        )
+        for col in df_nettoye.columns
+    ]
+})
+
+manquants = manquants[
+    manquants[
+        "Valeurs manquantes"
+    ] > 0
+]
+
+if len(manquants) > 0:
+
+    st.dataframe(
+        manquants,
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.success(
+        "Aucune valeur manquante détectée."
+    )
+
+# ------------------------------------------------------------
+# VALEURS TEXTUELLES REPRESENTANT DES MANQUANTS
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.3 Valeurs utilisées comme absence de réponse"
+)
+
+valeurs_manquantes_textuelles = [
+    "",
+    " ",
+    "na",
+    "n/a",
+    "nan",
+    "nd",
+    "n.d.",
+    "non disponible",
+    "non renseigné",
+    "non renseigne",
+    "aucun",
+    "aucune",
+    "néant",
+    "neant",
+    "ras",
+    "r.a.s.",
+    "-"
+]
+
+colonnes_textuelles = (
+    df_nettoye
+    .select_dtypes(
+        include=["object", "string"]
+    )
+    .columns
+)
+
+resultats_faux_manquants = []
+
+for col in colonnes_textuelles:
+
+    serie = (
+        df_nettoye[col]
+        .astype("string")
+        .str.strip()
+        .str.lower()
+    )
+
+    nombre = serie.isin(
+        valeurs_manquantes_textuelles
+    ).sum()
+
+    if nombre > 0:
+
+        resultats_faux_manquants.append({
+
+            "Variable":
+                col,
+
+            "Valeurs détectées":
+                int(nombre)
+        })
+
+if resultats_faux_manquants:
+
+    faux_manquants = pd.DataFrame(
+        resultats_faux_manquants
+    )
+
+    st.dataframe(
+        faux_manquants,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    if st.button(
+        "Convertir en valeurs manquantes",
+        key="convertir_faux_manquants"
+    ):
+
+        df_nettoye = df_nettoye.copy()
+
+        for col in colonnes_textuelles:
+
+            serie = (
+                df_nettoye[col]
+                .astype("string")
+                .str.strip()
+                .str.lower()
+            )
+
+            masque = serie.isin(
+                valeurs_manquantes_textuelles
+            )
+
+            df_nettoye.loc[
+                masque,
+                col
+            ] = np.nan
+
+        st.session_state[
+            "df_nettoye"
+        ] = df_nettoye
+
+        st.success(
+            "Conversion effectuée."
+        )
+
+        st.rerun()
+
+else:
+
+    st.info(
+        "Aucune valeur textuelle évidente "
+        "représentant une absence de réponse n'a été détectée."
+    )
+
+# ------------------------------------------------------------
+# ESPACES INUTILES
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.4 Espaces inutiles"
+)
+
+espaces_detectes = []
+
+for col in colonnes_textuelles:
+
+    serie = df_nettoye[
+        col
+    ].astype("string")
+
+    masque = (
+        serie.notna()
+        &
+        (serie != serie.str.strip())
+    )
+
+    nombre = masque.sum()
+
+    if nombre > 0:
+
+        espaces_detectes.append({
+
+            "Variable":
+                col,
+
+            "Réponses concernées":
+                int(nombre)
+        })
+
+if espaces_detectes:
+
+    espaces = pd.DataFrame(
+        espaces_detectes
+    )
+
+    st.dataframe(
+        espaces,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    if st.button(
+        "Supprimer les espaces inutiles",
+        key="supprimer_espaces"
+    ):
+
+        df_nettoye = df_nettoye.copy()
+
+        for col in colonnes_textuelles:
+
+            df_nettoye[col] = (
+                df_nettoye[col]
+                .astype("string")
+                .str.strip()
+            )
+
+        st.session_state[
+            "df_nettoye"
+        ] = df_nettoye
+
+        st.success(
+            "Les espaces inutiles ont été supprimés."
+        )
+
+        st.rerun()
+
+else:
+
+    st.success(
+        "Aucun espace inutile détecté."
+    )
+
+# ------------------------------------------------------------
+# DOUBLONS
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.5 Doublons"
+)
+
+nombre_doublons = int(
+    df_nettoye
+    .duplicated()
+    .sum()
+)
+
+if nombre_doublons > 0:
+
+    st.warning(
+        f"{nombre_doublons} doublon(s) exact(s) détecté(s)."
+    )
+
+    apercu_doublons = df_nettoye[
+        df_nettoye.duplicated(
+            keep=False
+        )
+    ]
+
+    st.dataframe(
+        apercu_doublons.head(50),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    if st.button(
+        "Supprimer les doublons exacts",
+        key="supprimer_doublons"
+    ):
+
+        avant = len(df_nettoye)
+
+        df_nettoye = (
+            df_nettoye
+            .drop_duplicates()
+            .reset_index(drop=True)
+        )
+
+        apres = len(df_nettoye)
+
+        st.session_state[
+            "df_nettoye"
+        ] = df_nettoye
+
+        st.success(
+            f"{avant - apres} doublon(s) supprimé(s)."
+        )
+
+        st.rerun()
+
+else:
+
+    st.success(
+        "Aucun doublon exact détecté."
+    )
+
+# ------------------------------------------------------------
+# UNIFORMISATION DES TEXTES
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.6 Uniformisation des réponses textuelles"
+)
+
+if len(colonnes_textuelles) > 0:
+
+    variable_uniformisation = st.selectbox(
+        "Variable textuelle",
+        list(colonnes_textuelles),
+        key="variable_uniformisation"
+    )
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+
+        if st.button(
+            "Supprimer les espaces",
+            key="uniformiser_espaces"
+        ):
+
+            df_nettoye[
+                variable_uniformisation
+            ] = (
+                df_nettoye[
+                    variable_uniformisation
+                ]
+                .astype("string")
+                .str.strip()
+            )
+
+            st.session_state[
+                "df_nettoye"
+            ] = df_nettoye
+
+            st.success(
+                "Espaces supprimés."
+            )
+
+            st.rerun()
+
+    with col_b:
+
+        if st.button(
+            "Mettre en minuscules",
+            key="mettre_minuscules"
+        ):
+
+            df_nettoye[
+                variable_uniformisation
+            ] = (
+                df_nettoye[
+                    variable_uniformisation
+                ]
+                .astype("string")
+                .str.lower()
+            )
+
+            st.session_state[
+                "df_nettoye"
+            ] = df_nettoye
+
+            st.success(
+                "Réponses mises en minuscules."
+            )
+
+            st.rerun()
+
+# ------------------------------------------------------------
+# VERIFICATION NUMERIQUE
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.7 Vérification des variables quantitatives"
+)
+
+variables_quantitatives = (
+    dictionnaire_modifie[
+        dictionnaire_modifie[
+            "Type d'analyse"
+        ] == "Quantitative"
+    ]["Variable"].tolist()
+)
+
+if variables_quantitatives:
+
+    variable_numerique = st.selectbox(
+        "Variable quantitative",
+        variables_quantitatives,
+        key="variable_numerique_nettoyage"
+    )
+
+    serie_originale = df_nettoye[
+        variable_numerique
+    ]
+
+    serie_convertie = pd.to_numeric(
+        serie_originale,
+        errors="coerce"
+    )
+
+    valeurs_non_convertibles = (
+        serie_originale.notna()
+        &
+        serie_convertie.isna()
+    ).sum()
+
+    st.write(
+        f"Valeurs non numériques détectées : "
+        f"**{valeurs_non_convertibles}**"
+    )
+
+    if valeurs_non_convertibles > 0:
+
+        valeurs_problematiques = (
+            serie_originale[
+                serie_originale.notna()
+                &
+                serie_convertie.isna()
+            ]
+            .astype(str)
+            .value_counts()
+            .reset_index()
+        )
+
+        valeurs_problematiques.columns = [
+            "Valeur",
+            "Effectif"
+        ]
+
+        st.dataframe(
+            valeurs_problematiques,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.warning(
+            "Ces valeurs seront transformées en "
+            "valeurs manquantes lors de la conversion."
+        )
+
+    if st.button(
+        "Convertir en numérique",
+        key="convertir_numerique"
+    ):
+
+        df_nettoye[
+            variable_numerique
+        ] = pd.to_numeric(
+            df_nettoye[
+                variable_numerique
+            ],
+            errors="coerce"
+        )
+
+        st.session_state[
+            "df_nettoye"
+        ] = df_nettoye
+
+        st.success(
+            "Conversion numérique effectuée."
+        )
+
+        st.rerun()
+
+else:
+
+    st.info(
+        "Aucune variable quantitative n'est actuellement identifiée."
+    )
+
+# ------------------------------------------------------------
+# VERIFICATION DES DATES
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.8 Vérification des dates"
+)
+
+variables_dates = (
+    dictionnaire_modifie[
+        dictionnaire_modifie[
+            "Type d'analyse"
+        ] == "Date"
+    ]["Variable"].tolist()
+)
+
+if variables_dates:
+
+    variable_date = st.selectbox(
+        "Variable de date",
+        variables_dates,
+        key="variable_date_nettoyage"
+    )
+
+    serie_date = pd.to_datetime(
+        df_nettoye[
+            variable_date
+        ],
+        errors="coerce"
+    )
+
+    valeurs_date_invalides = (
+        df_nettoye[
+            variable_date
+        ].notna()
+        &
+        serie_date.isna()
+    ).sum()
+
+    st.write(
+        f"Dates non reconnues : "
+        f"**{valeurs_date_invalides}**"
+    )
+
+    if valeurs_date_invalides > 0:
+
+        dates_problematiques = (
+            df_nettoye[
+                variable_date
+            ][
+                df_nettoye[
+                    variable_date
+                ].notna()
+                &
+                serie_date.isna()
+            ]
+            .astype(str)
+            .value_counts()
+            .reset_index()
+        )
+
+        dates_problematiques.columns = [
+            "Valeur",
+            "Effectif"
+        ]
+
+        st.dataframe(
+            dates_problematiques,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    if st.button(
+        "Convertir en date",
+        key="convertir_date"
+    ):
+
+        df_nettoye[
+            variable_date
+        ] = pd.to_datetime(
+            df_nettoye[
+                variable_date
+            ],
+            errors="coerce"
+        )
+
+        st.session_state[
+            "df_nettoye"
+        ] = df_nettoye
+
+        st.success(
+            "Conversion des dates effectuée."
+        )
+
+        st.rerun()
+
+else:
+
+    st.info(
+        "Aucune variable de date n'est actuellement identifiée."
+    )
+
+# ------------------------------------------------------------
+# APERCU APRES NETTOYAGE
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.9 Aperçu des données après nettoyage"
+)
+
+st.dataframe(
+    df_nettoye.head(20),
+    use_container_width=True,
+    hide_index=True
+)
+
+# ------------------------------------------------------------
+# COMPARAISON AVANT / APRES
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.10 Comparaison avant / après"
+)
+
+comparaison = pd.DataFrame({
+
+    "Indicateur": [
+        "Nombre de lignes",
+        "Nombre de variables",
+        "Cellules manquantes",
+        "Doublons"
+    ],
+
+    "Avant nettoyage": [
+
+        df.shape[0],
+
+        df.shape[1],
+
+        int(
+            df.isna()
+            .sum()
+            .sum()
+        ),
+
+        int(
+            df.duplicated()
+            .sum()
+        )
+    ],
+
+    "Après nettoyage": [
+
+        df_nettoye.shape[0],
+
+        df_nettoye.shape[1],
+
+        int(
+            df_nettoye.isna()
+            .sum()
+            .sum()
+        ),
+
+        int(
+            df_nettoye.duplicated()
+            .sum()
+        )
+    ]
+})
+
+st.dataframe(
+    comparaison,
+    use_container_width=True,
+    hide_index=True
+)
+
+# ------------------------------------------------------------
+# VALIDATION
+# ------------------------------------------------------------
+
+st.markdown(
+    "### 8.11 Validation du nettoyage"
+)
+
+if st.button(
+    "Valider les données nettoyées",
+    key="valider_nettoyage"
+):
+
+    st.session_state[
+        "donnees_nettoyage_valide"
+    ] = True
+
+    st.success(
+        "Les données nettoyées sont validées "
+        "pour la suite de l'analyse."
+    )
+
+# ------------------------------------------------------------
+# REINITIALISATION
+# ------------------------------------------------------------
+
+if st.button(
+    "Réinitialiser le nettoyage",
+    key="reset_nettoyage"
+):
+
+    st.session_state[
+        "df_nettoye"
+    ] = df.copy()
+
+    st.session_state[
+        "donnees_nettoyage_valide"
+    ] = False
+
+    st.success(
+        "Le nettoyage a été réinitialisé."
+    )
+
+    st.rerun()
+
+# ============================================================
 # ANALYSE BIVARIEE
 # ============================================================
 
 st.subheader(
-    "8. Analyse bivariée"
+    "9. Analyse bivariée"
 )
 
 st.write(
@@ -659,7 +1443,7 @@ st.write(
 )
 
 variables_disponibles = list(
-    df.columns
+    df_nettoye.columns
 )
 
 colonne1, colonne2 = st.columns(2)
@@ -723,10 +1507,10 @@ else:
     ):
 
         st.markdown(
-            "### 8.1 Qualitative × Qualitative"
+            "### 9.1 Qualitative × Qualitative"
         )
 
-        donnees = df[
+        donnees = df_nettoye[
             [variable1, variable2]
         ].dropna()
 
@@ -802,7 +1586,7 @@ else:
                         "Khi²",
                         "Degrés de liberté",
                         "p-value",
-                        "Effectifs attendus < 5"
+                        "% d'effectifs attendus < 5"
                     ],
 
                     "Valeur": [
@@ -819,7 +1603,10 @@ else:
                             4
                         ),
 
-                        f"{proportion_faible * 100:.1f} %"
+                        round(
+                            proportion_faible * 100,
+                            2
+                        )
                     ]
                 })
 
@@ -828,10 +1615,6 @@ else:
                     use_container_width=True,
                     hide_index=True
                 )
-
-                # ------------------------------------------------
-                # FISHER POUR TABLEAU 2 × 2
-                # ------------------------------------------------
 
                 if (
                     table_test.shape == (2, 2)
@@ -861,6 +1644,7 @@ else:
                                 odds_ratio,
                                 4
                             ),
+
                             round(
                                 fisher_p,
                                 4
@@ -877,19 +1661,17 @@ else:
                     if fisher_p < 0.05:
 
                         st.success(
-                            "Le test exact de Fisher "
-                            "indique une association "
-                            "statistiquement détectée "
-                            "au seuil de 5 %."
+                            "Le test exact de Fisher détecte "
+                            "une association statistiquement "
+                            "significative au seuil de 5 %."
                         )
 
                     else:
 
                         st.info(
-                            "Le test exact de Fisher "
-                            "ne détecte pas d'association "
-                            "statistiquement significative "
-                            "au seuil de 5 %."
+                            "Le test exact de Fisher ne détecte "
+                            "pas d'association statistiquement "
+                            "significative au seuil de 5 %."
                         )
 
                 else:
@@ -897,27 +1679,24 @@ else:
                     if proportion_faible > 0.20:
 
                         st.warning(
-                            "Une proportion importante "
-                            "des effectifs attendus est "
-                            "inférieure à 5. Le résultat "
-                            "du Khi² doit être interprété "
-                            "avec prudence."
+                            "Plus de 20 % des effectifs attendus "
+                            "sont inférieurs à 5. Le résultat "
+                            "du Khi² doit être interprété avec prudence."
                         )
 
                     elif p_value < 0.05:
 
                         st.success(
-                            "Le test du Khi² détecte une "
-                            "association statistiquement "
-                            "significative au seuil de 5 %."
+                            "Le test du Khi² détecte une association "
+                            "statistiquement significative au seuil de 5 %."
                         )
 
                     else:
 
                         st.info(
                             "Le test du Khi² ne détecte pas "
-                            "d'association statistiquement "
-                            "significative au seuil de 5 %."
+                            "d'association statistiquement significative "
+                            "au seuil de 5 %."
                         )
 
     # ========================================================
@@ -931,10 +1710,10 @@ else:
     ):
 
         st.markdown(
-            "### 8.2 Quantitative × Quantitative"
+            "### 9.2 Quantitative × Quantitative"
         )
 
-        donnees = df[
+        donnees = df_nettoye[
             [variable1, variable2]
         ].copy()
 
@@ -968,13 +1747,8 @@ else:
                 key="methode_correlation"
             )
 
-            x = donnees[
-                variable1
-            ]
-
-            y = donnees[
-                variable2
-            ]
+            x = donnees[variable1]
+            y = donnees[variable2]
 
             if methode == "Pearson":
 
@@ -1028,17 +1802,15 @@ else:
             if p_value < 0.05:
 
                 st.success(
-                    f"La corrélation de {methode} "
-                    f"est statistiquement détectée "
-                    f"au seuil de 5 %."
+                    f"La corrélation de {methode} est "
+                    "statistiquement significative au seuil de 5 %."
                 )
 
             else:
 
                 st.info(
-                    f"La corrélation de {methode} "
-                    f"n'est pas statistiquement détectée "
-                    f"au seuil de 5 %."
+                    f"La corrélation de {methode} n'est pas "
+                    "statistiquement significative au seuil de 5 %."
                 )
 
     # ========================================================
@@ -1055,10 +1827,10 @@ else:
         variable_quantitative = variable2
 
         st.markdown(
-            "### 8.3 Qualitative × Quantitative"
+            "### 9.3 Qualitative × Quantitative"
         )
 
-        donnees = df[
+        donnees = df_nettoye[
             [
                 variable_qualitative,
                 variable_quantitative
@@ -1080,16 +1852,7 @@ else:
             groupe[
                 variable_quantitative
             ].values
-
             for _, groupe
-            in donnees.groupby(
-                variable_qualitative
-            )
-        ]
-
-        noms_groupes = [
-            nom
-            for nom, _
             in donnees.groupby(
                 variable_qualitative
             )
@@ -1146,18 +1909,10 @@ else:
                 hide_index=True
             )
 
-            # ------------------------------------------------
-            # DEUX GROUPES
-            # ------------------------------------------------
-
             if len(groupes) == 2:
 
-                st.markdown(
-                    "#### Comparaison de deux groupes"
-                )
-
-                methode_comparaison = st.selectbox(
-                    "Test à utiliser",
+                methode = st.selectbox(
+                    "Test de comparaison",
                     [
                         "t-test de Welch",
                         "Mann-Whitney"
@@ -1165,37 +1920,23 @@ else:
                     key="test_deux_groupes"
                 )
 
-                if methode_comparaison == (
-                    "t-test de Welch"
-                ):
+                if methode == "t-test de Welch":
 
-                    statistique, p_value = (
-                        ttest_ind(
-                            groupes[0],
-                            groupes[1],
-                            equal_var=False
-                        )
-                    )
-
-                    nom_test = (
-                        "t-test de Welch"
+                    statistique, p_value = ttest_ind(
+                        groupes[0],
+                        groupes[1],
+                        equal_var=False
                     )
 
                 else:
 
-                    statistique, p_value = (
-                        mannwhitneyu(
-                            groupes[0],
-                            groupes[1],
-                            alternative="two-sided"
-                        )
+                    statistique, p_value = mannwhitneyu(
+                        groupes[0],
+                        groupes[1],
+                        alternative="two-sided"
                     )
 
-                    nom_test = (
-                        "Mann-Whitney"
-                    )
-
-                resultat_test = pd.DataFrame({
+                resultat = pd.DataFrame({
 
                     "Indicateur": [
                         "Test",
@@ -1205,7 +1946,7 @@ else:
                     ],
 
                     "Valeur": [
-                        nom_test,
+                        methode,
                         round(
                             statistique,
                             4
@@ -1219,7 +1960,7 @@ else:
                 })
 
                 st.dataframe(
-                    resultat_test,
+                    resultat,
                     use_container_width=True,
                     hide_index=True
                 )
@@ -1227,31 +1968,23 @@ else:
                 if p_value < 0.05:
 
                     st.success(
-                        "La différence entre les deux "
-                        "groupes est statistiquement "
-                        "détectée au seuil de 5 %."
+                        "La différence entre les deux groupes "
+                        "est statistiquement significative "
+                        "au seuil de 5 %."
                     )
 
                 else:
 
                     st.info(
-                        "Aucune différence statistiquement "
-                        "détectée entre les deux groupes "
+                        "La différence entre les deux groupes "
+                        "n'est pas statistiquement significative "
                         "au seuil de 5 %."
                     )
 
-            # ------------------------------------------------
-            # PLUS DE DEUX GROUPES
-            # ------------------------------------------------
-
             else:
 
-                st.markdown(
-                    "#### Comparaison de plusieurs groupes"
-                )
-
-                methode_multi = st.selectbox(
-                    "Test à utiliser",
+                methode = st.selectbox(
+                    "Test de comparaison",
                     [
                         "ANOVA à un facteur",
                         "Kruskal-Wallis"
@@ -1259,33 +1992,19 @@ else:
                     key="test_plusieurs_groupes"
                 )
 
-                if methode_multi == (
-                    "ANOVA à un facteur"
-                ):
+                if methode == "ANOVA à un facteur":
 
-                    statistique, p_value = (
-                        f_oneway(
-                            *groupes
-                        )
-                    )
-
-                    nom_test = (
-                        "ANOVA à un facteur"
+                    statistique, p_value = f_oneway(
+                        *groupes
                     )
 
                 else:
 
-                    statistique, p_value = (
-                        kruskal(
-                            *groupes
-                        )
+                    statistique, p_value = kruskal(
+                        *groupes
                     )
 
-                    nom_test = (
-                        "Kruskal-Wallis"
-                    )
-
-                resultat_test = pd.DataFrame({
+                resultat = pd.DataFrame({
 
                     "Indicateur": [
                         "Test",
@@ -1296,7 +2015,7 @@ else:
                     ],
 
                     "Valeur": [
-                        nom_test,
+                        methode,
                         round(
                             statistique,
                             4
@@ -1311,7 +2030,7 @@ else:
                 })
 
                 st.dataframe(
-                    resultat_test,
+                    resultat,
                     use_container_width=True,
                     hide_index=True
                 )
@@ -1320,29 +2039,22 @@ else:
 
                     st.success(
                         "Le test détecte une différence "
-                        "statistiquement significative "
-                        "entre au moins deux groupes "
-                        "au seuil de 5 %."
+                        "statistiquement significative entre "
+                        "au moins deux groupes au seuil de 5 %."
                     )
 
                     st.caption(
                         "Ce résultat ne précise pas à lui seul "
                         "quels groupes diffèrent entre eux. "
-                        "Des comparaisons post-hoc seraient "
-                        "nécessaires."
+                        "Des comparaisons post-hoc seraient nécessaires."
                     )
 
                 else:
 
                     st.info(
                         "Le test ne détecte pas de différence "
-                        "statistiquement significative entre "
-                        "les groupes au seuil de 5 %."
+                        "statistiquement significative entre les groupes."
                     )
-
-            st.markdown(
-                "#### Comparaison visuelle des moyennes"
-            )
 
             st.bar_chart(
                 statistiques_groupes.set_index(
@@ -1364,10 +2076,10 @@ else:
         variable_qualitative = variable2
 
         st.markdown(
-            "### 8.4 Quantitative × Qualitative"
+            "### 9.4 Quantitative × Qualitative"
         )
 
-        donnees = df[
+        donnees = df_nettoye[
             [
                 variable_quantitative,
                 variable_qualitative
@@ -1389,7 +2101,6 @@ else:
             groupe[
                 variable_quantitative
             ].values
-
             for _, groupe
             in donnees.groupby(
                 variable_qualitative
@@ -1454,26 +2165,20 @@ else:
                     key="test_quant_qual_2"
                 )
 
-                if methode == (
-                    "t-test de Welch"
-                ):
+                if methode == "t-test de Welch":
 
-                    statistique, p_value = (
-                        ttest_ind(
-                            groupes[0],
-                            groupes[1],
-                            equal_var=False
-                        )
+                    statistique, p_value = ttest_ind(
+                        groupes[0],
+                        groupes[1],
+                        equal_var=False
                     )
 
                 else:
 
-                    statistique, p_value = (
-                        mannwhitneyu(
-                            groupes[0],
-                            groupes[1],
-                            alternative="two-sided"
-                        )
+                    statistique, p_value = mannwhitneyu(
+                        groupes[0],
+                        groupes[1],
+                        alternative="two-sided"
                     )
 
                 resultat = pd.DataFrame({
@@ -1506,16 +2211,16 @@ else:
                 if p_value < 0.05:
 
                     st.success(
-                        "Une différence statistiquement "
-                        "détectée est observée entre "
-                        "les deux groupes au seuil de 5 %."
+                        "La différence entre les deux groupes "
+                        "est statistiquement significative "
+                        "au seuil de 5 %."
                     )
 
                 else:
 
                     st.info(
-                        "Aucune différence statistiquement "
-                        "détectée entre les deux groupes "
+                        "La différence entre les deux groupes "
+                        "n'est pas statistiquement significative "
                         "au seuil de 5 %."
                     )
 
@@ -1530,22 +2235,16 @@ else:
                     key="test_quant_qual_multi"
                 )
 
-                if methode == (
-                    "ANOVA à un facteur"
-                ):
+                if methode == "ANOVA à un facteur":
 
-                    statistique, p_value = (
-                        f_oneway(
-                            *groupes
-                        )
+                    statistique, p_value = f_oneway(
+                        *groupes
                     )
 
                 else:
 
-                    statistique, p_value = (
-                        kruskal(
-                            *groupes
-                        )
+                    statistique, p_value = kruskal(
+                        *groupes
                     )
 
                 resultat = pd.DataFrame({
@@ -1581,22 +2280,20 @@ else:
 
                     st.success(
                         "Le test détecte une différence "
-                        "statistiquement significative "
-                        "entre au moins deux groupes."
+                        "statistiquement significative entre "
+                        "au moins deux groupes."
                     )
 
                     st.caption(
-                        "Des analyses post-hoc seraient "
-                        "nécessaires pour identifier "
-                        "précisément les groupes concernés."
+                        "Des analyses post-hoc seraient nécessaires "
+                        "pour identifier précisément les groupes concernés."
                     )
 
                 else:
 
                     st.info(
                         "Le test ne détecte pas de différence "
-                        "statistiquement significative entre "
-                        "les groupes."
+                        "statistiquement significative entre les groupes."
                     )
 
             st.bar_chart(
@@ -1604,10 +2301,6 @@ else:
                     variable_qualitative
                 )["Moyenne"]
             )
-
-    # ========================================================
-    # AUTRES CAS
-    # ========================================================
 
     else:
 
@@ -1617,15 +2310,16 @@ else:
         )
 
 # ============================================================
-# CONCLUSION
+# FIN
 # ============================================================
 
 st.success(
-    "Analyse descriptive et bivariée disponible."
+    "Analyse descriptive, nettoyage et analyse bivariée disponibles."
 )
 
 st.info(
-    "Attention : une association ou une différence "
-    "statistiquement détectée ne signifie pas "
-    "nécessairement qu'il existe une relation causale."
+    "Une association ou une différence statistiquement "
+    "significative ne constitue pas à elle seule une preuve "
+    "de causalité."
 )
+```
