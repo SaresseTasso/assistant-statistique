@@ -219,8 +219,7 @@ dictionnaire_modifie = st.data_editor(
     column_config={
         "Type d'analyse": st.column_config.SelectboxColumn(
             "Type d'analyse",
-            options=types_possibles,
-            required=True
+            options=types_possibles
         )
     },
     disabled=[
