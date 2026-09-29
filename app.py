@@ -3591,65 +3591,149 @@ for _, ligne in dictionnaire_modifie.iterrows():
 st.markdown(
     "### 12.2 Interprétation des variables quantitatives"
 )
+=================
+INTERPRÉTATION DES VARIABLES QUANTITATIVES
+============================================================
 
-interpretations_quantitatives = []
+st.subheader("Interprétation des variables quantitatives")
 
-for _, ligne in dictionnaire_modifie.iterrows():
+quantitatives = dictionnaire[
+dictionnaire["Type d'analyse"].astype(str).str.strip() == "Quantitative"
+]["Variable"].tolist()
 
-    variable = ligne["Variable"]
+if not quantitatives:
+st.info("Aucune variable quantitative validée n'a été identifiée.")
+else:
 
-    if ligne["Type d'analyse"] != "Quantitative":
+for variable in quantitatives:
+
+    if variable not in df_nettoye.columns:
         continue
 
-    serie = pd.to_numeric(
-        df_nettoye[variable],
-        errors="coerce"
-    ).dropna()
+    serie = pd.to_numeric(df_nettoye[variable], errors="coerce")
+    serie_valide = serie.dropna()
 
-    if len(serie) == 0:
+    if len(serie_valide) == 0:
+        st.warning(
+            f"Impossible d'interpréter « {variable} » : "
+            "aucune valeur numérique valide."
+        )
         continue
 
-    effectif = len(serie)
+    # ----------------------------------------------------
+    # 1. TABLEAU DES STATISTIQUES DESCRIPTIVES
+    # ----------------------------------------------------
 
-    moyenne = serie.mean()
-    mediane = serie.median()
-    ecart_type = serie.std()
-    minimum = serie.min()
-    q1 = serie.quantile(0.25)
-    q3 = serie.quantile(0.75)
-    maximum = serie.max()
+    st.markdown(f"### {variable}")
 
-    interpretation = (
-        f"L'analyse de « {variable} » porte sur "
-        f"{effectif} observation(s) valides. "
-        f"La moyenne est de {moyenne:.2f}, tandis que "
-        f"la médiane est de {mediane:.2f}. "
-        f"L'écart-type s'établit à {ecart_type:.2f}. "
-        f"Les valeurs observées s'étendent de "
-        f"{minimum:.2f} à {maximum:.2f}. "
-        f"Par ailleurs, 50 % des observations se situent "
-        f"entre {q1:.2f} et {q3:.2f}."
-    )
+    n_valide = int(serie_valide.count())
+    n_manquants = int(serie.isna().sum())
 
-    st.markdown(
-        f"#### {variable}"
-    )
+    moyenne = serie_valide.mean()
+    mediane = serie_valide.median()
+    ecart_type = serie_valide.std()
+    minimum = serie_valide.min()
+    q1 = serie_valide.quantile(0.25)
+    q3 = serie_valide.quantile(0.75)
+    maximum = serie_valide.max()
 
-    st.write(
-        interpretation
-    )
-
-    interpretations_quantitatives.append({
-
-        "Type": "Variable quantitative",
-
-        "Variable": variable,
-
-        "Interprétation":
-            interpretation
-
+    tableau_quantitatif = pd.DataFrame({
+        "Indicateur": [
+            "Effectif valide",
+            "Valeurs manquantes",
+            "Moyenne",
+            "Médiane",
+            "Écart-type",
+            "Minimum",
+            "1er quartile (Q1)",
+            "3e quartile (Q3)",
+            "Maximum"
+        ],
+        "Valeur": [
+            n_valide,
+            n_manquants,
+            round(moyenne, 2),
+            round(mediane, 2),
+            round(ecart_type, 2) if pd.notna(ecart_type) else np.nan,
+            round(minimum, 2),
+            round(q1, 2),
+            round(q3, 2),
+            round(maximum, 2)
+        ]
     })
 
+    # Le tableau est affiché AVANT toute interprétation
+    st.dataframe(
+        tableau_quantitatif,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # ----------------------------------------------------
+    # 2. INTERPRÉTATION
+    # ----------------------------------------------------
+
+    interpretation = (
+        f"Sur les {n_valide} observations valides, la variable "
+        f"« {variable} » présente une moyenne de {moyenne:.2f} "
+        f"et une médiane de {mediane:.2f}. "
+    )
+
+    # Comparaison moyenne / médiane
+    if moyenne > mediane:
+        interpretation += (
+            "La moyenne étant supérieure à la médiane, "
+            "la distribution présente une tendance à être tirée "
+            "vers les valeurs élevées. "
+        )
+    elif moyenne < mediane:
+        interpretation += (
+            "La moyenne étant inférieure à la médiane, "
+            "la distribution présente une tendance à être tirée "
+            "vers les valeurs faibles. "
+        )
+    else:
+        interpretation += (
+            "La moyenne et la médiane sont très proches, "
+            "ce qui traduit une position centrale relativement similaire "
+            "selon ces deux indicateurs. "
+        )
+
+    # Dispersion
+    if pd.notna(ecart_type):
+        interpretation += (
+            f"Par ailleurs, l'écart-type est de {ecart_type:.2f}, "
+            f"avec des valeurs comprises entre {minimum:.2f} et "
+            f"{maximum:.2f}. "
+        )
+
+    # Étendue interquartile
+    iqr = q3 - q1
+
+    interpretation += (
+        f"Les 50 % centraux des observations se situent entre "
+        f"{q1:.2f} et {q3:.2f}, soit une étendue interquartile "
+        f"de {iqr:.2f}. "
+    )
+
+    # Données manquantes
+    if n_manquants > 0:
+        taux_manquants = (n_manquants / len(serie)) * 100
+
+        interpretation += (
+            f"Enfin, {n_manquants} valeur(s), soit "
+            f"{taux_manquants:.2f} % des observations, "
+            f"sont manquantes pour cette variable."
+        )
+    else:
+        interpretation += (
+            "Aucune valeur manquante n'a été relevée pour cette variable."
+        )
+
+    st.markdown("**Interprétation :**")
+    st.write(interpretation)
+
+    st.divider()
 
 # ============================================================
 # 12.4 QUESTIONS OUVERTES CODÉES
