@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # ============================================================
-# CONFIGURATION
+# CONFIGURATION DE LA PAGE
 # ============================================================
 
 st.set_page_config(
@@ -86,7 +86,7 @@ if fichier is not None:
         )
 
     # ========================================================
-    # APERÇU
+    # APERÇU DES DONNÉES
     # ========================================================
 
     st.subheader("Aperçu des données")
@@ -97,7 +97,7 @@ if fichier is not None:
     )
 
     # ========================================================
-    # DIAGNOSTIC
+    # DIAGNOSTIC DES VARIABLES
     # ========================================================
 
     st.subheader("Diagnostic des variables")
@@ -186,17 +186,17 @@ if fichier is not None:
 
         serie = df[colonne]
 
-        # Date
+        # Détection des dates
         if pd.api.types.is_datetime64_any_dtype(serie):
 
             return "Date"
 
-        # Numérique
+        # Détection des variables numériques
         if pd.api.types.is_numeric_dtype(serie):
 
             return "Quantitative"
 
-        # Texte
+        # Sinon : qualitative
         return "Qualitative"
 
     # ========================================================
@@ -243,14 +243,14 @@ if fichier is not None:
         ]
     })
 
+    # Type d'analyse proposé automatiquement
+
     dictionnaire["Type d'analyse"] = [
         proposer_type(col)
         for col in df.columns
     ]
 
-    # Par défaut :
-    # - numérique/date = non applicable
-    # - qualitative = à vérifier
+    # Type de question proposé automatiquement
 
     dictionnaire["Type de question"] = [
 
@@ -265,7 +265,7 @@ if fichier is not None:
     ]
 
     # ========================================================
-    # INITIALISATION / ACTUALISATION DU DICTIONNAIRE
+    # INITIALISATION DU DICTIONNAIRE
     # ========================================================
 
     colonnes_requises = [
@@ -278,7 +278,7 @@ if fichier is not None:
     ]
 
     # Si le dictionnaire n'existe pas
-    # OU si son ancienne structure est différente,
+    # ou si sa structure est ancienne,
     # on le reconstruit.
 
     if (
@@ -344,6 +344,7 @@ if fichier is not None:
     )
 
     # Sauvegarde des modifications
+
     st.session_state[
         "dictionnaire_modifie"
     ] = dictionnaire_modifie
@@ -370,9 +371,9 @@ if fichier is not None:
         "Qualitative codée"
     ]
 
-    # --------------------------------------------------------
+    # ========================================================
     # PARCOURS DES VARIABLES
-    # --------------------------------------------------------
+    # ========================================================
 
     for _, ligne in dictionnaire_modifie.iterrows():
 
@@ -398,20 +399,39 @@ if fichier is not None:
 
             serie = df[variable]
 
-            # Effectifs
-            effectifs = serie.value_counts(
-                dropna=False
-            )
+            # ------------------------------------------------
+            # INFORMATIONS SUR LES RÉPONSES
+            # ------------------------------------------------
 
-            # Pourcentages
+            nombre_total = len(serie)
+
+            nombre_valides = serie.notna().sum()
+
+            nombre_manquantes = serie.isna().sum()
+
+            # ------------------------------------------------
+            # EFFECTIFS
+            # ------------------------------------------------
+
+            effectifs = serie.dropna().value_counts()
+
+            # ------------------------------------------------
+            # POURCENTAGES
+            #
+            # Les pourcentages sont calculés uniquement
+            # sur les réponses valides.
+            # ------------------------------------------------
+
             pourcentages = (
-                serie.value_counts(
-                    normalize=True,
-                    dropna=False
+                serie.dropna().value_counts(
+                    normalize=True
                 ) * 100
             )
 
-            # Tableau
+            # ------------------------------------------------
+            # TABLEAU DES RÉSULTATS
+            # ------------------------------------------------
+
             resultat = pd.DataFrame({
 
                 "Modalité":
@@ -424,13 +444,30 @@ if fichier is not None:
                     pourcentages.values.round(2)
             })
 
+            # ------------------------------------------------
+            # AFFICHAGE DU TABLEAU
+            # ------------------------------------------------
+
             st.dataframe(
                 resultat,
                 use_container_width=True,
                 hide_index=True
             )
 
-            # Graphique
+            # ------------------------------------------------
+            # INFORMATIONS COMPLÉMENTAIRES
+            # ------------------------------------------------
+
+            st.caption(
+                f"Réponses valides : {nombre_valides} | "
+                f"Réponses manquantes : {nombre_manquantes} | "
+                f"Total : {nombre_total}"
+            )
+
+            # ------------------------------------------------
+            # GRAPHIQUE
+            # ------------------------------------------------
+
             graphique = resultat.set_index(
                 "Modalité"
             )["Effectif"]
