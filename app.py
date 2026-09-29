@@ -2610,3 +2610,487 @@ else:
 # ------------------------------------------------------------
 # 10.5 Contrôle des variables quantitatives
 # ---------------------
+
+# ============================================================
+# 11. CODIFICATION DES QUESTIONS OUVERTES
+# ============================================================
+
+st.subheader("11. Codification des questions ouvertes")
+
+st.write(
+    "Ce module permet de transformer les réponses ouvertes "
+    "en catégories thématiques. Les réponses originales sont "
+    "conservées et la codification reste validable par l'utilisateur."
+)
+
+# ------------------------------------------------------------
+# 11.1 Sélection des questions ouvertes
+# ------------------------------------------------------------
+
+variables_ouvertes = (
+    dictionnaire_modifie[
+        dictionnaire_modifie[
+            "Type de question"
+        ] == "Question ouverte"
+    ]["Variable"].tolist()
+)
+
+if not variables_ouvertes:
+
+    st.info(
+        "Aucune question ouverte n'est actuellement identifiée "
+        "dans le dictionnaire."
+    )
+
+else:
+
+    variable_ouverte = st.selectbox(
+        "Sélectionnez une question ouverte",
+        variables_ouvertes,
+        key="variable_question_ouverte"
+    )
+
+    serie_ouverte = (
+        df_nettoye[
+            variable_ouverte
+        ]
+        .dropna()
+        .astype(str)
+        .str.strip()
+    )
+
+    serie_ouverte = serie_ouverte[
+        serie_ouverte != ""
+    ]
+
+    st.write(
+        f"**Nombre de réponses renseignées : "
+        f"{len(serie_ouverte)}**"
+    )
+
+    # --------------------------------------------------------
+    # 11.2 Liste des réponses
+    # --------------------------------------------------------
+
+    st.markdown("### 11.1 Réponses originales")
+
+    reponses_originales = pd.DataFrame({
+        "Réponse originale":
+            serie_ouverte.values
+    })
+
+    st.dataframe(
+        reponses_originales,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # --------------------------------------------------------
+    # 11.3 Normalisation
+    # --------------------------------------------------------
+
+    st.markdown("### 11.2 Normalisation des réponses")
+
+    st.write(
+        "La normalisation sert uniquement à faciliter "
+        "le regroupement des réponses. La réponse originale "
+        "reste conservée."
+    )
+
+    def normaliser_texte(texte):
+
+        texte = str(texte)
+
+        texte = (
+            texte
+            .strip()
+            .lower()
+        )
+
+        texte = re.sub(
+            r"\s+",
+            " ",
+            texte
+        )
+
+        return texte
+
+    codification = pd.DataFrame({
+        "Réponse originale":
+            serie_ouverte.values
+    })
+
+    codification["Réponse normalisée"] = (
+        codification[
+            "Réponse originale"
+        ]
+        .apply(normaliser_texte)
+    )
+
+    st.dataframe(
+        codification,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # --------------------------------------------------------
+    # 11.4 Réponses non informatives
+    # --------------------------------------------------------
+
+    st.markdown(
+        "### 11.3 Réponses non informatives à vérifier"
+    )
+
+    reponses_non_informatives = [
+        "aucun",
+        "aucune",
+        "néant",
+        "neant",
+        "ras",
+        "r.a.s.",
+        "rien",
+        "non",
+        "aucune idée",
+        "je ne sais pas",
+        "ne sait pas"
+    ]
+
+    codification[
+        "Réponse normalisée"
+    ] = (
+        codification[
+            "Réponse normalisée"
+        ]
+        .astype(str)
+    )
+
+    codification["À vérifier"] = (
+        codification[
+            "Réponse normalisée"
+        ].isin(
+            reponses_non_informatives
+        )
+    )
+
+    nb_non_informatives = int(
+        codification[
+            "À vérifier"
+        ].sum()
+    )
+
+    if nb_non_informatives > 0:
+
+        st.warning(
+            f"{nb_non_informatives} réponse(s) "
+            "semblent non informatives et doivent être "
+            "vérifiées manuellement."
+        )
+
+        st.dataframe(
+            codification[
+                codification["À vérifier"]
+            ],
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+
+        st.success(
+            "Aucune réponse manifestement non informative "
+            "n'a été détectée."
+        )
+
+    # --------------------------------------------------------
+    # 11.5 Fréquence des réponses exactes
+    # --------------------------------------------------------
+
+    st.markdown(
+        "### 11.4 Fréquence des réponses similaires"
+    )
+
+    frequences = (
+        codification[
+            "Réponse normalisée"
+        ]
+        .value_counts()
+        .reset_index()
+    )
+
+    frequences.columns = [
+        "Réponse normalisée",
+        "Effectif"
+    ]
+
+    frequences["Pourcentage"] = (
+        frequences["Effectif"]
+        / len(codification)
+        * 100
+    ).round(2)
+
+    st.dataframe(
+        frequences,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # --------------------------------------------------------
+    # 11.6 Création des thèmes
+    # --------------------------------------------------------
+
+    st.markdown(
+        "### 11.5 Création des thèmes"
+    )
+
+    st.write(
+        "Créez les catégories qui serviront à regrouper "
+        "les réponses. Exemple : « Manque de financement », "
+        "« Manque de formation », « Accès au marché »."
+    )
+
+    if (
+        "themes_ouverts"
+        not in st.session_state
+    ):
+
+        st.session_state[
+            "themes_ouverts"
+        ] = []
+
+    nouveau_theme = st.text_input(
+        "Nom du nouveau thème",
+        key="nouveau_theme"
+    )
+
+    if st.button(
+        "Ajouter le thème",
+        key="ajouter_theme"
+    ):
+
+        theme = nouveau_theme.strip()
+
+        if theme == "":
+
+            st.warning(
+                "Veuillez saisir un nom de thème."
+            )
+
+        elif theme in st.session_state[
+            "themes_ouverts"
+        ]:
+
+            st.warning(
+                "Ce thème existe déjà."
+            )
+
+        else:
+
+            st.session_state[
+                "themes_ouverts"
+            ].append(theme)
+
+            st.success(
+                f"Thème « {theme} » ajouté."
+            )
+
+            st.rerun()
+
+    themes = st.session_state[
+        "themes_ouverts"
+    ]
+
+    if themes:
+
+        st.markdown("#### Thèmes disponibles")
+
+        for i, theme in enumerate(
+            themes,
+            start=1
+        ):
+
+            st.write(
+                f"{i}. {theme}"
+            )
+
+    else:
+
+        st.info(
+            "Aucun thème n'a encore été créé."
+        )
+
+    # --------------------------------------------------------
+    # 11.7 Codification manuelle
+    # --------------------------------------------------------
+
+    if themes:
+
+        st.markdown(
+            "### 11.6 Attribution des thèmes"
+        )
+
+        st.write(
+            "Attribuez un thème à chaque réponse. "
+            "L'option « Non codée » permet de laisser "
+            "une réponse en attente."
+        )
+
+        options_themes = [
+            "Non codée"
+        ] + themes
+
+        codification["Thème"] = "Non codée"
+
+        for index in codification.index:
+
+            reponse = codification.loc[
+                index,
+                "Réponse originale"
+            ]
+
+            choix = st.selectbox(
+                f"Réponse {index + 1} : {reponse}",
+                options_themes,
+                key=f"theme_reponse_{variable_ouverte}_{index}"
+            )
+
+            codification.loc[
+                index,
+                "Thème"
+            ] = choix
+
+        st.markdown(
+            "### 11.7 Résultats de la codification"
+        )
+
+        resultat_themes = (
+            codification[
+                codification["Thème"]
+                != "Non codée"
+            ]["Thème"]
+            .value_counts()
+            .reset_index()
+        )
+
+        resultat_themes.columns = [
+            "Thème",
+            "Effectif"
+        ]
+
+        if len(codification) > 0:
+
+            resultat_themes["Pourcentage"] = (
+                resultat_themes["Effectif"]
+                / len(codification)
+                * 100
+            ).round(2)
+
+        st.dataframe(
+            resultat_themes,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # ----------------------------------------------------
+        # 11.8 Vérification de la couverture
+        # ----------------------------------------------------
+
+        nb_codees = int(
+            (
+                codification["Thème"]
+                != "Non codée"
+            ).sum()
+        )
+
+        nb_non_codees = (
+            len(codification)
+            - nb_codees
+        )
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.metric(
+                "Réponses",
+                len(codification)
+            )
+
+        with c2:
+            st.metric(
+                "Réponses codées",
+                nb_codees
+            )
+
+        with c3:
+            st.metric(
+                "Non codées",
+                nb_non_codees
+            )
+
+        if nb_non_codees == 0:
+
+            st.success(
+                "Toutes les réponses ont reçu un thème."
+            )
+
+        else:
+
+            st.warning(
+                f"{nb_non_codees} réponse(s) restent "
+                "à coder."
+            )
+
+        # ----------------------------------------------------
+        # 11.9 Export de la codification
+        # ----------------------------------------------------
+
+        st.markdown(
+            "### 11.8 Export de la codification"
+        )
+
+        try:
+
+            buffer_codification = io.BytesIO()
+
+            with pd.ExcelWriter(
+                buffer_codification,
+                engine="openpyxl"
+            ) as writer:
+
+                codification.to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="Codification"
+                )
+
+                resultat_themes.to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="Résultats"
+                )
+
+            st.download_button(
+                label="Télécharger la codification Excel",
+                data=buffer_codification.getvalue(),
+                file_name=(
+                    "codification_question_ouverte.xlsx"
+                ),
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+                key="telecharger_codification"
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"Erreur lors de la préparation "
+                f"du fichier : {e}"
+            )
+
+    else:
+
+        st.info(
+            "Créez au moins un thème pour commencer "
+            "la codification."
+        )
