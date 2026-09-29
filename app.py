@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # ============================================================
-# CONFIGURATION DE LA PAGE
+# CONFIGURATION
 # ============================================================
 
 st.set_page_config(
@@ -16,6 +16,7 @@ st.set_page_config(
 # ============================================================
 
 st.title("Assistant statistique")
+
 st.write(
     "Importez votre fichier de données pour commencer l'analyse."
 )
@@ -31,13 +32,15 @@ fichier = st.file_uploader(
 
 if fichier is not None:
 
-    # --------------------------------------------------------
+    # ========================================================
     # LECTURE DU FICHIER
-    # --------------------------------------------------------
+    # ========================================================
 
     try:
+
         if fichier.name.endswith(".xlsx"):
             df = pd.read_excel(fichier)
+
         else:
             df = pd.read_csv(fichier)
 
@@ -46,9 +49,11 @@ if fichier is not None:
         )
 
     except Exception as e:
+
         st.error(
             f"Une erreur est survenue lors de la lecture du fichier : {e}"
         )
+
         st.stop()
 
     # ========================================================
@@ -60,25 +65,28 @@ if fichier is not None:
     col1, col2, col3 = st.columns(3)
 
     with col1:
+
         st.metric(
             "Nombre de lignes",
             df.shape[0]
         )
 
     with col2:
+
         st.metric(
             "Nombre de variables",
             df.shape[1]
         )
 
     with col3:
+
         st.metric(
             "Nombre de doublons",
             df.duplicated().sum()
         )
 
     # ========================================================
-    # APERÇU DES DONNÉES
+    # APERÇU
     # ========================================================
 
     st.subheader("Aperçu des données")
@@ -89,21 +97,25 @@ if fichier is not None:
     )
 
     # ========================================================
-    # DIAGNOSTIC DES VARIABLES
+    # DIAGNOSTIC
     # ========================================================
 
     st.subheader("Diagnostic des variables")
 
     diagnostic = pd.DataFrame({
+
         "Variable": df.columns,
+
         "Type Python": [
             str(df[col].dtype)
             for col in df.columns
         ],
+
         "Valeurs manquantes": [
             df[col].isna().sum()
             for col in df.columns
         ],
+
         "Valeurs uniques": [
             df[col].nunique(dropna=True)
             for col in df.columns
@@ -123,13 +135,19 @@ if fichier is not None:
     st.subheader("Valeurs manquantes")
 
     manquants = pd.DataFrame({
+
         "Variable": df.columns,
+
         "Effectif manquant": [
             df[col].isna().sum()
             for col in df.columns
         ],
+
         "Pourcentage manquant": [
-            round(df[col].isna().mean() * 100, 2)
+            round(
+                df[col].isna().mean() * 100,
+                2
+            )
             for col in df.columns
         ]
     })
@@ -149,79 +167,40 @@ if fichier is not None:
     nombre_doublons = df.duplicated().sum()
 
     if nombre_doublons == 0:
-        st.success("Aucun doublon détecté.")
+
+        st.success(
+            "Aucun doublon détecté."
+        )
+
     else:
+
         st.warning(
             f"{nombre_doublons} doublon(s) détecté(s)."
         )
 
     # ========================================================
-    # DICTIONNAIRE DES VARIABLES
+    # FONCTION DE PROPOSITION DU TYPE
     # ========================================================
-
-    st.subheader("Dictionnaire des variables")
-
-    dictionnaire = pd.DataFrame({
-        "Variable": df.columns,
-        "Type Python": [
-            str(df[col].dtype)
-            for col in df.columns
-        ],
-        "Nombre de modalités": [
-            df[col].nunique(dropna=True)
-            for col in df.columns
-        ],
-        "Valeurs manquantes": [
-            df[col].isna().sum()
-            for col in df.columns
-        ]
-    })
-
-    # --------------------------------------------------------
-    # FONCTION DE PROPOSITION DU TYPE D'ANALYSE
-    # --------------------------------------------------------
 
     def proposer_type(colonne):
 
         serie = df[colonne]
 
-        # Détection des dates
+        # Date
         if pd.api.types.is_datetime64_any_dtype(serie):
+
             return "Date"
 
-        # Détection des variables numériques
+        # Numérique
         if pd.api.types.is_numeric_dtype(serie):
+
             return "Quantitative"
 
-        # Sinon, variable qualitative
+        # Texte
         return "Qualitative"
 
-    # --------------------------------------------------------
-    # TYPE D'ANALYSE PROPOSÉ
-    # --------------------------------------------------------
-
-    dictionnaire["Type d'analyse"] = [
-        proposer_type(col)
-        for col in df.columns
-    ]
-
-    # --------------------------------------------------------
-    # TYPE DE QUESTION
-    # --------------------------------------------------------
-
-    dictionnaire["Type de question"] = [
-        "Non applicable"
-        if proposer_type(col) in [
-            "Quantitative",
-            "Date",
-            "Identifiant"
-        ]
-        else "Question fermée"
-        for col in df.columns
-    ]
-
     # ========================================================
-    # LISTES DES TYPES
+    # TYPES DISPONIBLES
     # ========================================================
 
     types_possibles = [
@@ -241,18 +220,95 @@ if fichier is not None:
     ]
 
     # ========================================================
-    # MÉMOIRE DU DICTIONNAIRE
+    # CONSTRUCTION DU DICTIONNAIRE
     # ========================================================
 
-    if "dictionnaire_modifie" not in st.session_state:
+    dictionnaire = pd.DataFrame({
+
+        "Variable": df.columns,
+
+        "Type Python": [
+            str(df[col].dtype)
+            for col in df.columns
+        ],
+
+        "Nombre de modalités": [
+            df[col].nunique(dropna=True)
+            for col in df.columns
+        ],
+
+        "Valeurs manquantes": [
+            df[col].isna().sum()
+            for col in df.columns
+        ]
+    })
+
+    dictionnaire["Type d'analyse"] = [
+        proposer_type(col)
+        for col in df.columns
+    ]
+
+    # Par défaut :
+    # - numérique/date = non applicable
+    # - qualitative = à vérifier
+
+    dictionnaire["Type de question"] = [
+
+        "Non applicable"
+        if proposer_type(col) in [
+            "Quantitative",
+            "Date"
+        ]
+        else "Question fermée"
+
+        for col in df.columns
+    ]
+
+    # ========================================================
+    # INITIALISATION / ACTUALISATION DU DICTIONNAIRE
+    # ========================================================
+
+    colonnes_requises = [
+        "Variable",
+        "Type Python",
+        "Nombre de modalités",
+        "Valeurs manquantes",
+        "Type d'analyse",
+        "Type de question"
+    ]
+
+    # Si le dictionnaire n'existe pas
+    # OU si son ancienne structure est différente,
+    # on le reconstruit.
+
+    if (
+        "dictionnaire_modifie" not in st.session_state
+        or
+        not all(
+            colonne in st.session_state[
+                "dictionnaire_modifie"
+            ].columns
+            for colonne in colonnes_requises
+        )
+        or
+        len(
+            st.session_state[
+                "dictionnaire_modifie"
+            ]
+        ) != len(df.columns)
+    ):
 
         st.session_state[
             "dictionnaire_modifie"
         ] = dictionnaire.copy()
 
     # ========================================================
-    # ÉDITEUR DU DICTIONNAIRE
+    # DICTIONNAIRE DES VARIABLES
     # ========================================================
+
+    st.subheader(
+        "Dictionnaire des variables"
+    )
 
     dictionnaire_modifie = st.data_editor(
 
@@ -283,6 +339,7 @@ if fichier is not None:
         ],
 
         use_container_width=True,
+
         hide_index=True
     )
 
@@ -297,7 +354,7 @@ if fichier is not None:
 
     st.info(
         "Vérifiez le type d'analyse et le type de question "
-        "de chaque variable avant de poursuivre l'analyse."
+        "de chaque variable avant de poursuivre."
     )
 
     # ========================================================
@@ -313,6 +370,10 @@ if fichier is not None:
         "Qualitative codée"
     ]
 
+    # --------------------------------------------------------
+    # PARCOURS DES VARIABLES
+    # --------------------------------------------------------
+
     for _, ligne in dictionnaire_modifie.iterrows():
 
         variable = ligne["Variable"]
@@ -321,13 +382,14 @@ if fichier is not None:
 
         type_question = ligne["Type de question"]
 
-        # ----------------------------------------------------
-        # QUESTIONS FERMÉES
-        # ----------------------------------------------------
+        # ====================================================
+        # QUESTION FERMÉE
+        # ====================================================
 
         if (
             type_analyse in types_qualitatifs
-            and type_question == "Question fermée"
+            and
+            type_question == "Question fermée"
         ):
 
             st.markdown(
@@ -349,7 +411,7 @@ if fichier is not None:
                 ) * 100
             )
 
-            # Tableau des résultats
+            # Tableau
             resultat = pd.DataFrame({
 
                 "Modalité":
@@ -373,15 +435,18 @@ if fichier is not None:
                 "Modalité"
             )["Effectif"]
 
-            st.bar_chart(graphique)
+            st.bar_chart(
+                graphique
+            )
 
-        # ----------------------------------------------------
-        # QUESTIONS OUVERTES
-        # ----------------------------------------------------
+        # ====================================================
+        # QUESTION OUVERTE
+        # ====================================================
 
         elif (
             type_analyse in types_qualitatifs
-            and type_question == "Question ouverte"
+            and
+            type_question == "Question ouverte"
         ):
 
             st.markdown(
@@ -395,13 +460,14 @@ if fichier is not None:
                 "réponses ouvertes."
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # RÉPONSES MULTIPLES
-        # ----------------------------------------------------
+        # ====================================================
 
         elif (
             type_analyse in types_qualitatifs
-            and type_question == "Réponses multiples"
+            and
+            type_question == "Réponses multiples"
         ):
 
             st.markdown(
