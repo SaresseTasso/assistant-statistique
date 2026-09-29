@@ -3591,29 +3591,27 @@ for _, ligne in dictionnaire_modifie.iterrows():
 st.markdown(
     "### 12.2 Interprétation des variables quantitatives"
 )
-# =================
-# INTERPRÉTATION DES VARIABLES QUANTITATIVES
-# ============================================================
-
-st.subheader("Interprétation des variables quantitatives")
 
 st.subheader("Interprétation des variables quantitatives")
 
 quantitatives = dictionnaire[
-    dictionnaire["Type d'analyse"].astype(str).str.strip() == "Quantitative"
+dictionnaire["Type d'analyse"].astype(str).str.strip() == "Quantitative"
 ]["Variable"].tolist()
 
 if not quantitatives:
-    st.info("Aucune variable quantitative validée n'a été identifiée.")
+st.info("Aucune variable quantitative validée n'a été identifiée.")
+
 else:
-    for variable in quantitatives:
-        if variable not in df_nettoye.columns:
-            continue
+for variable in quantitatives:
 
-        serie = pd.to_numeric(df_nettoye[variable], errors="coerce")
-        serie_valide = serie.dropna()
+    if variable not in df_nettoye.columns:
+        continue
 
-    serie = pd.to_numeric(df_nettoye[variable], errors="coerce")
+    serie = pd.to_numeric(
+        df_nettoye[variable],
+        errors="coerce"
+    )
+
     serie_valide = serie.dropna()
 
     if len(serie_valide) == 0:
@@ -3623,12 +3621,9 @@ else:
         )
         continue
 
-    # ----------------------------------------------------
-    # 1. TABLEAU DES STATISTIQUES DESCRIPTIVES
-    # ----------------------------------------------------
-
     st.markdown(f"### {variable}")
 
+    # Statistiques descriptives
     n_valide = int(serie_valide.count())
     n_manquants = int(serie.isna().sum())
 
@@ -3657,7 +3652,7 @@ else:
             n_manquants,
             round(moyenne, 2),
             round(mediane, 2),
-            round(ecart_type, 2) if pd.notna(ecart_type) else np.nan,
+            round(ecart_type, 2),
             round(minimum, 2),
             round(q1, 2),
             round(q3, 2),
@@ -3665,47 +3660,48 @@ else:
         ]
     })
 
+    # Tableau affiché AVANT l'interprétation
+    st.markdown("**Tableau des statistiques descriptives**")
+
     st.dataframe(
         tableau_quantitatif,
         use_container_width=True,
         hide_index=True
     )
 
-    # ----------------------------------------------------
-    # 2. INTERPRÉTATION
-    # ----------------------------------------------------
-
+    # Interprétation
     interpretation = (
-        f"Sur les {n_valide} observations valides, la variable "
-        f"« {variable} » présente une moyenne de {moyenne:.2f} "
-        f"et une médiane de {mediane:.2f}. "
+        f"Sur les {n_valide} observations valides, "
+        f"la variable « {variable} » présente une moyenne "
+        f"de {moyenne:.2f} et une médiane de {mediane:.2f}. "
     )
 
     if moyenne > mediane:
         interpretation += (
             "La moyenne étant supérieure à la médiane, "
-            "la distribution présente une tendance à être tirée "
-            "vers les valeurs élevées. "
+            "la distribution présente une tendance vers "
+            "les valeurs élevées. "
         )
+
     elif moyenne < mediane:
         interpretation += (
             "La moyenne étant inférieure à la médiane, "
-            "la distribution présente une tendance à être tirée "
-            "vers les valeurs faibles. "
-        )
-    else:
-        interpretation += (
-            "La moyenne et la médiane sont très proches, "
-            "ce qui traduit une position centrale relativement similaire "
-            "selon ces deux indicateurs. "
+            "la distribution présente une tendance vers "
+            "les valeurs faibles. "
         )
 
-    if pd.notna(ecart_type):
+    else:
         interpretation += (
-            f"Par ailleurs, l'écart-type est de {ecart_type:.2f}, "
-            f"avec des valeurs comprises entre {minimum:.2f} et "
-            f"{maximum:.2f}. "
+            "La moyenne et la médiane sont identiques ou très proches, "
+            "indiquant une position centrale similaire selon ces deux "
+            "indicateurs. "
         )
+
+    interpretation += (
+        f"Par ailleurs, l'écart-type est de {ecart_type:.2f}, "
+        f"avec des valeurs comprises entre {minimum:.2f} "
+        f"et {maximum:.2f}. "
+    )
 
     iqr = q3 - q1
 
@@ -3716,16 +3712,22 @@ else:
     )
 
     if n_manquants > 0:
-        taux_manquants = (n_manquants / len(serie)) * 100
+
+        taux_manquants = (
+            n_manquants / len(serie)
+        ) * 100
 
         interpretation += (
             f"Enfin, {n_manquants} valeur(s), soit "
             f"{taux_manquants:.2f} % des observations, "
-            f"sont manquantes pour cette variable."
+            "sont manquantes pour cette variable."
         )
+
     else:
+
         interpretation += (
-            "Aucune valeur manquante n'a été relevée pour cette variable."
+            "Aucune valeur manquante n'a été relevée "
+            "pour cette variable."
         )
 
     st.markdown("**Interprétation :**")
