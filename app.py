@@ -239,3 +239,57 @@ st.info(
     "Vérifiez le type d'analyse de chaque variable avant "
     "de poursuivre l'analyse."
 )
+# ============================================================
+# ANALYSE DES VARIABLES QUALITATIVES
+# ============================================================
+
+st.subheader("Analyse des variables qualitatives")
+
+types_qualitatifs = [
+    "Qualitative",
+    "Qualitative codée"
+]
+
+for _, ligne in dictionnaire_modifie.iterrows():
+
+    variable = ligne["Variable"]
+    type_analyse = ligne["Type d'analyse"]
+
+    if type_analyse in types_qualitatifs:
+
+        st.markdown(f"### {variable}")
+
+        serie = df[variable]
+
+        # Effectifs
+        effectifs = serie.value_counts(
+            dropna=False
+        )
+
+        # Pourcentages
+        pourcentages = (
+            serie.value_counts(
+                normalize=True,
+                dropna=False
+            ) * 100
+        )
+
+        # Tableau de résultats
+        resultat = pd.DataFrame({
+            "Modalité": effectifs.index.astype(str),
+            "Effectif": effectifs.values,
+            "Pourcentage": pourcentages.values.round(2)
+        })
+
+        st.dataframe(
+            resultat,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Graphique
+        graphique = resultat.set_index(
+            "Modalité"
+        )["Effectif"]
+
+        st.bar_chart(graphique)
