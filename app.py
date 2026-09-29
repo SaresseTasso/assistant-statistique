@@ -1,34 +1,46 @@
 import streamlit as st
 import pandas as pd
 
-# Configuration de la page
+# ============================================================
+# CONFIGURATION DE LA PAGE
+# ============================================================
+
 st.set_page_config(
     page_title="Assistant statistique",
     page_icon="📊",
     layout="wide"
 )
 
-# Titre principal
+# ============================================================
+# TITRE
+# ============================================================
+
 st.title("Assistant statistique")
 
 st.write(
     "Importez votre fichier de données pour commencer l'analyse."
 )
 
-# Importation du fichier
+# ============================================================
+# IMPORTATION DU FICHIER
+# ============================================================
+
 fichier = st.file_uploader(
     "Choisissez votre fichier de données",
     type=["xlsx", "csv"]
 )
 
-# Si un fichier est importé
+# ============================================================
+# ANALYSE DU FICHIER
+# ============================================================
+
 if fichier is not None:
 
-    # Lecture du fichier Excel
+    # Lecture Excel
     if fichier.name.endswith(".xlsx"):
         df = pd.read_excel(fichier)
 
-    # Lecture du fichier CSV
+    # Lecture CSV
     else:
         df = pd.read_csv(fichier)
 
@@ -36,10 +48,13 @@ if fichier is not None:
         f"Fichier chargé avec succès : {fichier.name}"
     )
 
-    # Informations générales
-    st.subheader("Informations sur les données")
+    # ========================================================
+    # INFORMATIONS GÉNÉRALES
+    # ========================================================
 
-    col1, col2 = st.columns(2)
+    st.subheader("Informations générales")
+
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         st.metric(
@@ -53,10 +68,92 @@ if fichier is not None:
             df.shape[1]
         )
 
-    # Aperçu
+    with col3:
+        st.metric(
+            "Nombre de doublons",
+            df.duplicated().sum()
+        )
+
+    # ========================================================
+    # APERÇU DES DONNÉES
+    # ========================================================
+
     st.subheader("Aperçu des données")
 
     st.dataframe(
-        df,
+        df.head(20),
         use_container_width=True
     )
+
+    # ========================================================
+    # DIAGNOSTIC DES VARIABLES
+    # ========================================================
+
+    st.subheader("Diagnostic des variables")
+
+    diagnostic = pd.DataFrame({
+        "Variable": df.columns,
+        "Type Python": [
+            str(df[col].dtype)
+            for col in df.columns
+        ],
+        "Valeurs manquantes": [
+            df[col].isna().sum()
+            for col in df.columns
+        ],
+        "Valeurs uniques": [
+            df[col].nunique(dropna=True)
+            for col in df.columns
+        ]
+    })
+
+    st.dataframe(
+        diagnostic,
+        use_container_width=True
+    )
+
+    # ========================================================
+    # VALEURS MANQUANTES
+    # ========================================================
+
+    st.subheader("Valeurs manquantes")
+
+    manquants = pd.DataFrame({
+        "Variable": df.columns,
+        "Effectif manquant": [
+            df[col].isna().sum()
+            for col in df.columns
+        ],
+        "Pourcentage manquant": [
+            round(
+                df[col].isna().mean() * 100,
+                2
+            )
+            for col in df.columns
+        ]
+    })
+
+    st.dataframe(
+        manquants,
+        use_container_width=True
+    )
+
+    # ========================================================
+    # DOUBLONS
+    # ========================================================
+
+    st.subheader("Doublons")
+
+    nombre_doublons = df.duplicated().sum()
+
+    if nombre_doublons == 0:
+
+        st.success(
+            "Aucun doublon détecté."
+        )
+
+    else:
+
+        st.warning(
+            f"{nombre_doublons} doublon(s) détecté(s)."
+        )
