@@ -2,7 +2,17 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-from scipy.stats import chi2_contingency
+
+from scipy.stats import (
+    chi2_contingency,
+    fisher_exact,
+    pearsonr,
+    spearmanr,
+    ttest_ind,
+    mannwhitneyu,
+    f_oneway,
+    kruskal
+)
 
 # ============================================================
 # CONFIGURATION
@@ -15,13 +25,15 @@ st.set_page_config(
 )
 
 st.title("Assistant statistique")
+
 st.write(
     "Analysez vos fichiers Excel ou CSV : diagnostic, "
-    "dictionnaire, fréquences et statistiques descriptives."
+    "dictionnaire, fréquences, statistiques descriptives "
+    "et analyses bivariées."
 )
 
 # ============================================================
-# IMPORTATION
+# IMPORTATION DU FICHIER
 # ============================================================
 
 fichier = st.file_uploader(
@@ -32,10 +44,6 @@ fichier = st.file_uploader(
 if fichier is None:
     st.info("Veuillez importer un fichier Excel ou CSV.")
     st.stop()
-
-# ============================================================
-# LECTURE
-# ============================================================
 
 try:
     if fichier.name.lower().endswith(".xlsx"):
@@ -50,7 +58,7 @@ except Exception as e:
 st.success(f"Fichier chargé : {fichier.name}")
 
 # ============================================================
-# INFORMATIONS GÉNÉRALES
+# INFORMATIONS GENERALES
 # ============================================================
 
 st.subheader("1. Informations générales")
@@ -73,7 +81,7 @@ with col4:
     )
 
 # ============================================================
-# APERÇU
+# APERCU
 # ============================================================
 
 st.subheader("2. Aperçu des données")
@@ -116,10 +124,6 @@ st.dataframe(
     hide_index=True
 )
 
-# ============================================================
-# DOUBLONS
-# ============================================================
-
 if df.duplicated().sum() > 0:
     st.warning(
         f"{df.duplicated().sum()} doublon(s) détecté(s)."
@@ -128,7 +132,7 @@ else:
     st.success("Aucun doublon détecté.")
 
 # ============================================================
-# FONCTION DE PROPOSITION DU TYPE
+# PROPOSITION DU TYPE
 # ============================================================
 
 def proposer_type(colonne):
@@ -143,10 +147,6 @@ def proposer_type(colonne):
 
     return "Qualitative"
 
-
-# ============================================================
-# TYPES
-# ============================================================
 
 types_analyse = [
     "Qualitative",
@@ -196,15 +196,12 @@ dictionnaire["Type de question"] = [
     "Non applicable"
     if proposer_type(col) in [
         "Quantitative",
-        "Date"
+        "Date",
+        "Identifiant"
     ]
     else "Question fermée"
     for col in df.columns
 ]
-
-# ============================================================
-# INITIALISATION SESSION
-# ============================================================
 
 colonnes_requises = [
     "Variable",
@@ -237,7 +234,7 @@ if (
     ] = dictionnaire.copy()
 
 # ============================================================
-# ÉDITION DU DICTIONNAIRE
+# EDITION DU DICTIONNAIRE
 # ============================================================
 
 st.subheader("4. Dictionnaire des variables")
@@ -281,7 +278,9 @@ st.session_state[
 # ANALYSE QUALITATIVE
 # ============================================================
 
-st.subheader("5. Analyse des variables qualitatives")
+st.subheader(
+    "5. Analyse des variables qualitatives"
+)
 
 types_qualitatifs = [
     "Qualitative",
@@ -291,19 +290,28 @@ types_qualitatifs = [
 for _, ligne in dictionnaire_modifie.iterrows():
 
     variable = ligne["Variable"]
-    type_analyse = ligne["Type d'analyse"]
-    type_question = ligne["Type de question"]
 
-    # ========================================================
-    # QUESTIONS FERMÉES
-    # ========================================================
+    type_analyse = ligne[
+        "Type d'analyse"
+    ]
+
+    type_question = ligne[
+        "Type de question"
+    ]
+
+    # --------------------------------------------------------
+    # QUESTION FERMEE
+    # --------------------------------------------------------
 
     if (
         type_analyse in types_qualitatifs
-        and type_question == "Question fermée"
+        and
+        type_question == "Question fermée"
     ):
 
-        st.markdown(f"### {variable}")
+        st.markdown(
+            f"### {variable}"
+        )
 
         serie = df[variable]
 
@@ -318,6 +326,7 @@ for _, ligne in dictionnaire_modifie.iterrows():
         )
 
         resultat = pd.DataFrame({
+
             "Modalité":
                 effectifs.index.astype(str),
 
@@ -341,29 +350,38 @@ for _, ligne in dictionnaire_modifie.iterrows():
         )
 
         st.bar_chart(
-            resultat.set_index("Modalité")["Effectif"]
+            resultat.set_index(
+                "Modalité"
+            )["Effectif"]
         )
 
-    # ========================================================
-    # QUESTIONS OUVERTES
-    # ========================================================
+    # --------------------------------------------------------
+    # QUESTION OUVERTE
+    # --------------------------------------------------------
 
     elif (
         type_analyse in types_qualitatifs
-        and type_question == "Question ouverte"
+        and
+        type_question == "Question ouverte"
     ):
 
-        st.markdown(f"### {variable}")
+        st.markdown(
+            f"### {variable}"
+        )
 
-        serie = df[variable].dropna().astype(str)
+        serie = (
+            df[variable]
+            .dropna()
+            .astype(str)
+        )
 
         st.write(
             f"**Nombre de réponses : {len(serie)}**"
         )
 
-        # Affichage des réponses
         apercu = pd.DataFrame({
-            "Réponses": serie.head(20).values
+            "Réponses":
+                serie.head(20).values
         })
 
         st.dataframe(
@@ -374,25 +392,29 @@ for _, ligne in dictionnaire_modifie.iterrows():
 
         st.info(
             "Cette variable est ouverte. "
-            "Elle sera soumise au module de codification."
+            "Elle sera traitée dans le futur module "
+            "de codification thématique."
         )
 
-    # ========================================================
-    # RÉPONSES MULTIPLES
-    # ========================================================
+    # --------------------------------------------------------
+    # REPONSES MULTIPLES
+    # --------------------------------------------------------
 
     elif (
         type_analyse in types_qualitatifs
-        and type_question == "Réponses multiples"
+        and
+        type_question == "Réponses multiples"
     ):
 
-        st.markdown(f"### {variable}")
+        st.markdown(
+            f"### {variable}"
+        )
 
-        serie = df[variable].dropna().astype(str)
-
-        # ----------------------------------------------------
-        # Séparation des réponses
-        # ----------------------------------------------------
+        serie = (
+            df[variable]
+            .dropna()
+            .astype(str)
+        )
 
         reponses = []
 
@@ -408,17 +430,22 @@ for _, ligne in dictionnaire_modifie.iterrows():
                 morceau = morceau.strip()
 
                 if morceau:
-                    reponses.append(morceau)
+                    reponses.append(
+                        morceau
+                    )
 
         if reponses:
 
-            freq = pd.Series(
-                reponses
-            ).value_counts()
+            freq = (
+                pd.Series(
+                    reponses
+                )
+                .value_counts()
+            )
 
             pourcentage = (
-                freq / len(serie) * 100
-            )
+                freq / len(serie)
+            ) * 100
 
             resultat_multiple = pd.DataFrame({
 
@@ -429,7 +456,9 @@ for _, ligne in dictionnaire_modifie.iterrows():
                     freq.values,
 
                 "% des répondants":
-                    pourcentage.round(2).values
+                    pourcentage.round(
+                        2
+                    ).values
             })
 
             st.dataframe(
@@ -439,31 +468,39 @@ for _, ligne in dictionnaire_modifie.iterrows():
             )
 
             st.caption(
-                "Les pourcentages peuvent dépasser 100 % au total "
-                "car un répondant peut avoir plusieurs réponses."
+                "Les pourcentages peuvent dépasser "
+                "100 % au total car un répondant peut "
+                "avoir plusieurs réponses."
             )
 
         else:
 
             st.warning(
-                "Aucune réponse multiple exploitable détectée."
+                "Aucune réponse multiple exploitable "
+                "détectée."
             )
 
 # ============================================================
 # ANALYSE QUANTITATIVE
 # ============================================================
 
-st.subheader("6. Analyse des variables quantitatives")
+st.subheader(
+    "6. Analyse des variables quantitatives"
+)
 
 for _, ligne in dictionnaire_modifie.iterrows():
 
     variable = ligne["Variable"]
 
-    type_analyse = ligne["Type d'analyse"]
+    type_analyse = ligne[
+        "Type d'analyse"
+    ]
 
     if type_analyse == "Quantitative":
 
-        st.markdown(f"### {variable}")
+        st.markdown(
+            f"### {variable}"
+        )
 
         serie = pd.to_numeric(
             df[variable],
@@ -481,6 +518,7 @@ for _, ligne in dictionnaire_modifie.iterrows():
         statistiques = pd.DataFrame({
 
             "Indicateur": [
+
                 "Effectif valide",
                 "Valeurs manquantes",
                 "Moyenne",
@@ -498,19 +536,40 @@ for _, ligne in dictionnaire_modifie.iterrows():
 
                 df[variable].isna().sum(),
 
-                round(serie.mean(), 2),
+                round(
+                    serie.mean(),
+                    2
+                ),
 
-                round(serie.median(), 2),
+                round(
+                    serie.median(),
+                    2
+                ),
 
-                round(serie.std(), 2),
+                round(
+                    serie.std(),
+                    2
+                ),
 
-                round(serie.min(), 2),
+                round(
+                    serie.min(),
+                    2
+                ),
 
-                round(serie.quantile(0.25), 2),
+                round(
+                    serie.quantile(0.25),
+                    2
+                ),
 
-                round(serie.quantile(0.75), 2),
+                round(
+                    serie.quantile(0.75),
+                    2
+                ),
 
-                round(serie.max(), 2)
+                round(
+                    serie.max(),
+                    2
+                )
             ]
         })
 
@@ -521,37 +580,42 @@ for _, ligne in dictionnaire_modifie.iterrows():
         )
 
 # ============================================================
-# RÉSUMÉ FINAL DU DIAGNOSTIC
+# RESUME DU DIAGNOSTIC
 # ============================================================
 
-st.subheader("7. Résumé du diagnostic")
+st.subheader(
+    "7. Résumé du diagnostic"
+)
 
 nb_qualitatives = len(
     dictionnaire_modifie[
-        dictionnaire_modifie["Type d'analyse"].isin(
-            types_qualitatifs
-        )
+        dictionnaire_modifie[
+            "Type d'analyse"
+        ].isin(types_qualitatifs)
     ]
 )
 
 nb_quantitatives = len(
     dictionnaire_modifie[
-        dictionnaire_modifie["Type d'analyse"]
-        == "Quantitative"
+        dictionnaire_modifie[
+            "Type d'analyse"
+        ] == "Quantitative"
     ]
 )
 
 nb_dates = len(
     dictionnaire_modifie[
-        dictionnaire_modifie["Type d'analyse"]
-        == "Date"
+        dictionnaire_modifie[
+            "Type d'analyse"
+        ] == "Date"
     ]
 )
 
 nb_identifiants = len(
     dictionnaire_modifie[
-        dictionnaire_modifie["Type d'analyse"]
-        == "Identifiant"
+        dictionnaire_modifie[
+            "Type d'analyse"
+        ] == "Identifiant"
     ]
 )
 
@@ -581,20 +645,22 @@ with c4:
         nb_identifiants
     )
 
-st.success(
-    "Analyse descriptive terminée."
-)
 # ============================================================
-# ANALYSE BIVARIÉE
+# ANALYSE BIVARIEE
 # ============================================================
 
-st.subheader("8. Analyse bivariée")
+st.subheader(
+    "8. Analyse bivariée"
+)
 
 st.write(
-    "Sélectionnez deux variables pour étudier leur relation."
+    "Sélectionnez deux variables pour étudier "
+    "leur relation ou leur différence."
 )
 
-variables_disponibles = list(df.columns)
+variables_disponibles = list(
+    df.columns
+)
 
 colonne1, colonne2 = st.columns(2)
 
@@ -611,7 +677,11 @@ with colonne2:
     variable2 = st.selectbox(
         "Variable 2",
         variables_disponibles,
-        index=1 if len(variables_disponibles) > 1 else 0,
+        index=(
+            1
+            if len(variables_disponibles) > 1
+            else 0
+        ),
         key="variable_bivariee_2"
     )
 
@@ -624,18 +694,22 @@ if variable1 == variable2:
 else:
 
     type1 = dictionnaire_modifie.loc[
-        dictionnaire_modifie["Variable"] == variable1,
+        dictionnaire_modifie[
+            "Variable"
+        ] == variable1,
         "Type d'analyse"
     ].iloc[0]
 
     type2 = dictionnaire_modifie.loc[
-        dictionnaire_modifie["Variable"] == variable2,
+        dictionnaire_modifie[
+            "Variable"
+        ] == variable2,
         "Type d'analyse"
     ].iloc[0]
 
     st.info(
-        f"Analyse sélectionnée : **{variable1}** "
-        f"({type1}) × **{variable2}** ({type2})"
+        f"**{variable1}** ({type1}) × "
+        f"**{variable2}** ({type2})"
     )
 
     # ========================================================
@@ -643,89 +717,208 @@ else:
     # ========================================================
 
     if (
-        type1 in ["Qualitative", "Qualitative codée"]
+        type1 in types_qualitatifs
         and
-        type2 in ["Qualitative", "Qualitative codée"]
+        type2 in types_qualitatifs
     ):
 
-        st.markdown("### Tableau croisé")
-
-        tableau = pd.crosstab(
-            df[variable1],
-            df[variable2],
-            margins=True
+        st.markdown(
+            "### 8.1 Qualitative × Qualitative"
         )
 
-        st.dataframe(
-            tableau,
-            use_container_width=True
-        )
+        donnees = df[
+            [variable1, variable2]
+        ].dropna()
 
-        st.markdown("### Pourcentages par ligne")
+        if len(donnees) == 0:
 
-        tableau_pourcentage = pd.crosstab(
-            df[variable1],
-            df[variable2],
-            normalize="index"
-        ) * 100
-
-        st.dataframe(
-            tableau_pourcentage.round(2),
-            use_container_width=True
-        )
-
-        # ----------------------------------------------------
-        # TEST DU KHI²
-        # ----------------------------------------------------
-
-        donnees_test = pd.crosstab(
-            df[variable1],
-            df[variable2]
-        )
-
-        if (
-            donnees_test.shape[0] >= 2
-            and donnees_test.shape[1] >= 2
-        ):
-
-            chi2, p_value, ddl, effectifs_attendus = (
-                chi2_contingency(donnees_test)
+            st.warning(
+                "Aucune donnée exploitable."
             )
 
-            st.markdown("### Test du Khi²")
+        else:
 
-            resultat_chi2 = pd.DataFrame({
-                "Indicateur": [
-                    "Khi²",
-                    "Degrés de liberté",
-                    "p-value"
-                ],
-                "Valeur": [
-                    round(chi2, 4),
-                    ddl,
-                    round(p_value, 4)
-                ]
-            })
+            tableau = pd.crosstab(
+                donnees[variable1],
+                donnees[variable2],
+                margins=True
+            )
+
+            st.markdown(
+                "#### Tableau croisé"
+            )
 
             st.dataframe(
-                resultat_chi2,
-                use_container_width=True,
-                hide_index=True
+                tableau,
+                use_container_width=True
             )
 
-            if p_value < 0.05:
+            tableau_pourcentage = (
+                pd.crosstab(
+                    donnees[variable1],
+                    donnees[variable2],
+                    normalize="index"
+                ) * 100
+            )
 
-                st.success(
-                    "Le test du Khi² indique une association "
-                    "statistiquement significative au seuil de 5 %."
+            st.markdown(
+                "#### Pourcentages par ligne"
+            )
+
+            st.dataframe(
+                tableau_pourcentage.round(2),
+                use_container_width=True
+            )
+
+            table_test = pd.crosstab(
+                donnees[variable1],
+                donnees[variable2]
+            )
+
+            if (
+                table_test.shape[0] >= 2
+                and
+                table_test.shape[1] >= 2
+            ):
+
+                chi2, p_value, ddl, attendus = (
+                    chi2_contingency(
+                        table_test
+                    )
                 )
 
-            else:
-
-                st.info(
-                    "Le test du Khi² n'indique pas d'association "
-                    "statistiquement significative au seuil de 5 %."
+                proportion_faible = (
+                    (attendus < 5).sum()
+                    / attendus.size
                 )
+
+                st.markdown(
+                    "#### Test d'association"
+                )
+
+                resultat_test = pd.DataFrame({
+
+                    "Indicateur": [
+                        "Khi²",
+                        "Degrés de liberté",
+                        "p-value",
+                        "Effectifs attendus < 5"
+                    ],
+
+                    "Valeur": [
+
+                        round(
+                            chi2,
+                            4
+                        ),
+
+                        ddl,
+
+                        round(
+                            p_value,
+                            4
+                        ),
+
+                        f"{proportion_faible * 100:.1f} %"
+                    ]
+                })
+
+                st.dataframe(
+                    resultat_test,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # ------------------------------------------------
+                # FISHER POUR TABLEAU 2 × 2
+                # ------------------------------------------------
+
+                if (
+                    table_test.shape == (2, 2)
+                    and
+                    proportion_faible > 0
+                ):
+
+                    odds_ratio, fisher_p = (
+                        fisher_exact(
+                            table_test
+                        )
+                    )
+
+                    st.markdown(
+                        "#### Test exact de Fisher"
+                    )
+
+                    fisher_resultat = pd.DataFrame({
+
+                        "Indicateur": [
+                            "Odds ratio",
+                            "p-value"
+                        ],
+
+                        "Valeur": [
+                            round(
+                                odds_ratio,
+                                4
+                            ),
+                            round(
+                                fisher_p,
+                                4
+                            )
+                        ]
+                    })
+
+                    st.dataframe(
+                        fisher_resultat,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                    if fisher_p < 0.05:
+
+                        st.success(
+                            "Le test exact de Fisher "
+                            "indique une association "
+                            "statistiquement détectée "
+                            "au seuil de 5 %."
+                        )
+
+                    else:
+
+                        st.info(
+                            "Le test exact de Fisher "
+                            "ne détecte pas d'association "
+                            "statistiquement significative "
+                            "au seuil de 5 %."
+                        )
+
+                else:
+
+                    if proportion_faible > 0.20:
+
+                        st.warning(
+                            "Une proportion importante "
+                            "des effectifs attendus est "
+                            "inférieure à 5. Le résultat "
+                            "du Khi² doit être interprété "
+                            "avec prudence."
+                        )
+
+                    elif p_value < 0.05:
+
+                        st.success(
+                            "Le test du Khi² détecte une "
+                            "association statistiquement "
+                            "significative au seuil de 5 %."
+                        )
+
+                    else:
+
+                        st.info(
+                            "Le test du Khi² ne détecte pas "
+                            "d'association statistiquement "
+                            "significative au seuil de 5 %."
+                        )
 
     # ========================================================
     # QUANTITATIVE × QUANTITATIVE
@@ -737,130 +930,8 @@ else:
         type2 == "Quantitative"
     ):
 
-        st.markdown("### Corrélation entre les deux variables")
-
-        donnees = df[
-            [variable1, variable2]
-        ].apply(
-            pd.to_numeric,
-            errors="coerce"
-        ).dropna()
-
-        if len(donnees) >= 2:
-
-            correlation = donnees[
-                variable1
-            ].corr(
-                donnees[variable2]
-            )
-
-            st.metric(
-                "Corrélation de Pearson",
-                round(correlation, 4)
-            )
-
-            st.scatter_chart(
-                donnees,
-                x=variable1,
-                y=variable2
-            )
-
-        else:
-
-            st.warning(
-                "Pas suffisamment de données numériques "
-                "pour calculer la corrélation."
-            )
-
-    # ========================================================
-    # QUALITATIVE × QUANTITATIVE
-    # ========================================================
-
-    elif (
-        type1 in ["Qualitative", "Qualitative codée"]
-        and
-        type2 == "Quantitative"
-    ):
-
         st.markdown(
-            f"### Statistiques de {variable2} selon {variable1}"
-        )
-
-        donnees = df[
-            [variable1, variable2]
-        ].copy()
-
-        donnees[variable2] = pd.to_numeric(
-            donnees[variable2],
-            errors="coerce"
-        )
-
-        donnees = donnees.dropna()
-
-        if len(donnees) > 0:
-
-            statistiques_groupes = (
-                donnees
-                .groupby(variable1)[variable2]
-                .agg(
-                    Effectif="count",
-                    Moyenne="mean",
-                    Médiane="median",
-                    Écart_type="std",
-                    Minimum="min",
-                    Maximum="max"
-                )
-                .reset_index()
-            )
-
-            statistiques_groupes[
-                [
-                    "Moyenne",
-                    "Médiane",
-                    "Écart_type",
-                    "Minimum",
-                    "Maximum"
-                ]
-            ] = statistiques_groupes[
-                [
-                    "Moyenne",
-                    "Médiane",
-                    "Écart_type",
-                    "Minimum",
-                    "Maximum"
-                ]
-            ].round(2)
-
-            st.dataframe(
-                statistiques_groupes,
-                use_container_width=True,
-                hide_index=True
-            )
-
-            st.bar_chart(
-                statistiques_groupes.set_index(variable1)[
-                    "Moyenne"
-                ]
-            )
-
-        else:
-
-            st.warning(
-                "Pas suffisamment de données exploitables."
-            )
-
-    # ========================================================
-    # QUANTITATIVE × QUALITATIVE
-    # ========================================================
-
-    elif (
-        type1 == "Quantitative"
-        and
-        type2 in ["Qualitative", "Qualitative codée"]
-    ):
-
-        st.markdown(
-            f"### Statistiques de {variable1} selon {variable2}"
+            "### 8.2 Quantitative × Quantitative"
         )
 
         donnees = df[
@@ -872,13 +943,174 @@ else:
             errors="coerce"
         )
 
+        donnees[variable2] = pd.to_numeric(
+            donnees[variable2],
+            errors="coerce"
+        )
+
         donnees = donnees.dropna()
 
-        if len(donnees) > 0:
+        if len(donnees) < 3:
+
+            st.warning(
+                "Pas suffisamment de données "
+                "pour réaliser une corrélation."
+            )
+
+        else:
+
+            methode = st.selectbox(
+                "Méthode de corrélation",
+                [
+                    "Pearson",
+                    "Spearman"
+                ],
+                key="methode_correlation"
+            )
+
+            x = donnees[
+                variable1
+            ]
+
+            y = donnees[
+                variable2
+            ]
+
+            if methode == "Pearson":
+
+                coefficient, p_value = pearsonr(
+                    x,
+                    y
+                )
+
+            else:
+
+                coefficient, p_value = spearmanr(
+                    x,
+                    y
+                )
+
+            resultat_corr = pd.DataFrame({
+
+                "Indicateur": [
+                    "Coefficient",
+                    "p-value",
+                    "Effectif"
+                ],
+
+                "Valeur": [
+                    round(
+                        coefficient,
+                        4
+                    ),
+
+                    round(
+                        p_value,
+                        4
+                    ),
+
+                    len(donnees)
+                ]
+            })
+
+            st.dataframe(
+                resultat_corr,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.scatter_chart(
+                donnees,
+                x=variable1,
+                y=variable2
+            )
+
+            if p_value < 0.05:
+
+                st.success(
+                    f"La corrélation de {methode} "
+                    f"est statistiquement détectée "
+                    f"au seuil de 5 %."
+                )
+
+            else:
+
+                st.info(
+                    f"La corrélation de {methode} "
+                    f"n'est pas statistiquement détectée "
+                    f"au seuil de 5 %."
+                )
+
+    # ========================================================
+    # QUALITATIVE × QUANTITATIVE
+    # ========================================================
+
+    elif (
+        type1 in types_qualitatifs
+        and
+        type2 == "Quantitative"
+    ):
+
+        variable_qualitative = variable1
+        variable_quantitative = variable2
+
+        st.markdown(
+            "### 8.3 Qualitative × Quantitative"
+        )
+
+        donnees = df[
+            [
+                variable_qualitative,
+                variable_quantitative
+            ]
+        ].copy()
+
+        donnees[
+            variable_quantitative
+        ] = pd.to_numeric(
+            donnees[
+                variable_quantitative
+            ],
+            errors="coerce"
+        )
+
+        donnees = donnees.dropna()
+
+        groupes = [
+            groupe[
+                variable_quantitative
+            ].values
+
+            for _, groupe
+            in donnees.groupby(
+                variable_qualitative
+            )
+        ]
+
+        noms_groupes = [
+            nom
+            for nom, _
+            in donnees.groupby(
+                variable_qualitative
+            )
+        ]
+
+        if len(groupes) < 2:
+
+            st.warning(
+                "Il faut au moins deux groupes "
+                "pour réaliser une comparaison."
+            )
+
+        else:
 
             statistiques_groupes = (
                 donnees
-                .groupby(variable2)[variable1]
+                .groupby(
+                    variable_qualitative
+                )[
+                    variable_quantitative
+                ]
                 .agg(
                     Effectif="count",
                     Moyenne="mean",
@@ -890,22 +1122,319 @@ else:
                 .reset_index()
             )
 
+            colonnes_arrondir = [
+                "Moyenne",
+                "Médiane",
+                "Écart_type",
+                "Minimum",
+                "Maximum"
+            ]
+
             statistiques_groupes[
-                [
-                    "Moyenne",
-                    "Médiane",
-                    "Écart_type",
-                    "Minimum",
-                    "Maximum"
-                ]
+                colonnes_arrondir
             ] = statistiques_groupes[
-                [
-                    "Moyenne",
-                    "Médiane",
-                    "Écart_type",
-                    "Minimum",
-                    "Maximum"
+                colonnes_arrondir
+            ].round(2)
+
+            st.markdown(
+                "#### Statistiques par groupe"
+            )
+
+            st.dataframe(
+                statistiques_groupes,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # ------------------------------------------------
+            # DEUX GROUPES
+            # ------------------------------------------------
+
+            if len(groupes) == 2:
+
+                st.markdown(
+                    "#### Comparaison de deux groupes"
+                )
+
+                methode_comparaison = st.selectbox(
+                    "Test à utiliser",
+                    [
+                        "t-test de Welch",
+                        "Mann-Whitney"
+                    ],
+                    key="test_deux_groupes"
+                )
+
+                if methode_comparaison == (
+                    "t-test de Welch"
+                ):
+
+                    statistique, p_value = (
+                        ttest_ind(
+                            groupes[0],
+                            groupes[1],
+                            equal_var=False
+                        )
+                    )
+
+                    nom_test = (
+                        "t-test de Welch"
+                    )
+
+                else:
+
+                    statistique, p_value = (
+                        mannwhitneyu(
+                            groupes[0],
+                            groupes[1],
+                            alternative="two-sided"
+                        )
+                    )
+
+                    nom_test = (
+                        "Mann-Whitney"
+                    )
+
+                resultat_test = pd.DataFrame({
+
+                    "Indicateur": [
+                        "Test",
+                        "Statistique",
+                        "p-value",
+                        "Effectif total"
+                    ],
+
+                    "Valeur": [
+                        nom_test,
+                        round(
+                            statistique,
+                            4
+                        ),
+                        round(
+                            p_value,
+                            4
+                        ),
+                        len(donnees)
+                    ]
+                })
+
+                st.dataframe(
+                    resultat_test,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                if p_value < 0.05:
+
+                    st.success(
+                        "La différence entre les deux "
+                        "groupes est statistiquement "
+                        "détectée au seuil de 5 %."
+                    )
+
+                else:
+
+                    st.info(
+                        "Aucune différence statistiquement "
+                        "détectée entre les deux groupes "
+                        "au seuil de 5 %."
+                    )
+
+            # ------------------------------------------------
+            # PLUS DE DEUX GROUPES
+            # ------------------------------------------------
+
+            else:
+
+                st.markdown(
+                    "#### Comparaison de plusieurs groupes"
+                )
+
+                methode_multi = st.selectbox(
+                    "Test à utiliser",
+                    [
+                        "ANOVA à un facteur",
+                        "Kruskal-Wallis"
+                    ],
+                    key="test_plusieurs_groupes"
+                )
+
+                if methode_multi == (
+                    "ANOVA à un facteur"
+                ):
+
+                    statistique, p_value = (
+                        f_oneway(
+                            *groupes
+                        )
+                    )
+
+                    nom_test = (
+                        "ANOVA à un facteur"
+                    )
+
+                else:
+
+                    statistique, p_value = (
+                        kruskal(
+                            *groupes
+                        )
+                    )
+
+                    nom_test = (
+                        "Kruskal-Wallis"
+                    )
+
+                resultat_test = pd.DataFrame({
+
+                    "Indicateur": [
+                        "Test",
+                        "Statistique",
+                        "p-value",
+                        "Nombre de groupes",
+                        "Effectif total"
+                    ],
+
+                    "Valeur": [
+                        nom_test,
+                        round(
+                            statistique,
+                            4
+                        ),
+                        round(
+                            p_value,
+                            4
+                        ),
+                        len(groupes),
+                        len(donnees)
+                    ]
+                })
+
+                st.dataframe(
+                    resultat_test,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                if p_value < 0.05:
+
+                    st.success(
+                        "Le test détecte une différence "
+                        "statistiquement significative "
+                        "entre au moins deux groupes "
+                        "au seuil de 5 %."
+                    )
+
+                    st.caption(
+                        "Ce résultat ne précise pas à lui seul "
+                        "quels groupes diffèrent entre eux. "
+                        "Des comparaisons post-hoc seraient "
+                        "nécessaires."
+                    )
+
+                else:
+
+                    st.info(
+                        "Le test ne détecte pas de différence "
+                        "statistiquement significative entre "
+                        "les groupes au seuil de 5 %."
+                    )
+
+            st.markdown(
+                "#### Comparaison visuelle des moyennes"
+            )
+
+            st.bar_chart(
+                statistiques_groupes.set_index(
+                    variable_qualitative
+                )["Moyenne"]
+            )
+
+    # ========================================================
+    # QUANTITATIVE × QUALITATIVE
+    # ========================================================
+
+    elif (
+        type1 == "Quantitative"
+        and
+        type2 in types_qualitatifs
+    ):
+
+        variable_quantitative = variable1
+        variable_qualitative = variable2
+
+        st.markdown(
+            "### 8.4 Quantitative × Qualitative"
+        )
+
+        donnees = df[
+            [
+                variable_quantitative,
+                variable_qualitative
+            ]
+        ].copy()
+
+        donnees[
+            variable_quantitative
+        ] = pd.to_numeric(
+            donnees[
+                variable_quantitative
+            ],
+            errors="coerce"
+        )
+
+        donnees = donnees.dropna()
+
+        groupes = [
+            groupe[
+                variable_quantitative
+            ].values
+
+            for _, groupe
+            in donnees.groupby(
+                variable_qualitative
+            )
+        ]
+
+        if len(groupes) < 2:
+
+            st.warning(
+                "Il faut au moins deux groupes "
+                "pour réaliser une comparaison."
+            )
+
+        else:
+
+            statistiques_groupes = (
+                donnees
+                .groupby(
+                    variable_qualitative
+                )[
+                    variable_quantitative
                 ]
+                .agg(
+                    Effectif="count",
+                    Moyenne="mean",
+                    Médiane="median",
+                    Écart_type="std",
+                    Minimum="min",
+                    Maximum="max"
+                )
+                .reset_index()
+            )
+
+            colonnes_arrondir = [
+                "Moyenne",
+                "Médiane",
+                "Écart_type",
+                "Minimum",
+                "Maximum"
+            ]
+
+            statistiques_groupes[
+                colonnes_arrondir
+            ] = statistiques_groupes[
+                colonnes_arrondir
             ].round(2)
 
             st.dataframe(
@@ -914,17 +1443,171 @@ else:
                 hide_index=True
             )
 
+            if len(groupes) == 2:
+
+                methode = st.selectbox(
+                    "Test de comparaison",
+                    [
+                        "t-test de Welch",
+                        "Mann-Whitney"
+                    ],
+                    key="test_quant_qual_2"
+                )
+
+                if methode == (
+                    "t-test de Welch"
+                ):
+
+                    statistique, p_value = (
+                        ttest_ind(
+                            groupes[0],
+                            groupes[1],
+                            equal_var=False
+                        )
+                    )
+
+                else:
+
+                    statistique, p_value = (
+                        mannwhitneyu(
+                            groupes[0],
+                            groupes[1],
+                            alternative="two-sided"
+                        )
+                    )
+
+                resultat = pd.DataFrame({
+
+                    "Indicateur": [
+                        "Test",
+                        "Statistique",
+                        "p-value"
+                    ],
+
+                    "Valeur": [
+                        methode,
+                        round(
+                            statistique,
+                            4
+                        ),
+                        round(
+                            p_value,
+                            4
+                        )
+                    ]
+                })
+
+                st.dataframe(
+                    resultat,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                if p_value < 0.05:
+
+                    st.success(
+                        "Une différence statistiquement "
+                        "détectée est observée entre "
+                        "les deux groupes au seuil de 5 %."
+                    )
+
+                else:
+
+                    st.info(
+                        "Aucune différence statistiquement "
+                        "détectée entre les deux groupes "
+                        "au seuil de 5 %."
+                    )
+
+            else:
+
+                methode = st.selectbox(
+                    "Test de comparaison",
+                    [
+                        "ANOVA à un facteur",
+                        "Kruskal-Wallis"
+                    ],
+                    key="test_quant_qual_multi"
+                )
+
+                if methode == (
+                    "ANOVA à un facteur"
+                ):
+
+                    statistique, p_value = (
+                        f_oneway(
+                            *groupes
+                        )
+                    )
+
+                else:
+
+                    statistique, p_value = (
+                        kruskal(
+                            *groupes
+                        )
+                    )
+
+                resultat = pd.DataFrame({
+
+                    "Indicateur": [
+                        "Test",
+                        "Statistique",
+                        "p-value",
+                        "Nombre de groupes"
+                    ],
+
+                    "Valeur": [
+                        methode,
+                        round(
+                            statistique,
+                            4
+                        ),
+                        round(
+                            p_value,
+                            4
+                        ),
+                        len(groupes)
+                    ]
+                })
+
+                st.dataframe(
+                    resultat,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                if p_value < 0.05:
+
+                    st.success(
+                        "Le test détecte une différence "
+                        "statistiquement significative "
+                        "entre au moins deux groupes."
+                    )
+
+                    st.caption(
+                        "Des analyses post-hoc seraient "
+                        "nécessaires pour identifier "
+                        "précisément les groupes concernés."
+                    )
+
+                else:
+
+                    st.info(
+                        "Le test ne détecte pas de différence "
+                        "statistiquement significative entre "
+                        "les groupes."
+                    )
+
             st.bar_chart(
-                statistiques_groupes.set_index(variable2)[
-                    "Moyenne"
-                ]
+                statistiques_groupes.set_index(
+                    variable_qualitative
+                )["Moyenne"]
             )
 
-        else:
-
-            st.warning(
-                "Pas suffisamment de données exploitables."
-            )
+    # ========================================================
+    # AUTRES CAS
+    # ========================================================
 
     else:
 
@@ -932,3 +1615,17 @@ else:
             "Cette combinaison de types de variables "
             "n'est pas encore prise en charge."
         )
+
+# ============================================================
+# CONCLUSION
+# ============================================================
+
+st.success(
+    "Analyse descriptive et bivariée disponible."
+)
+
+st.info(
+    "Attention : une association ou une différence "
+    "statistiquement détectée ne signifie pas "
+    "nécessairement qu'il existe une relation causale."
+)
