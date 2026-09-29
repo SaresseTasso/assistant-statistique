@@ -2322,3 +2322,291 @@ st.info(
     "significative ne constitue pas à elle seule une preuve "
     "de causalité."
 )
+
+# ============================================================
+# 10. CONTRÔLE QUALITÉ DES DONNÉES
+# ============================================================
+
+st.subheader("10. Contrôle qualité des données")
+
+st.write(
+    "Ce module recherche des valeurs potentiellement problématiques "
+    "avant l'analyse statistique. Les réponses comme « aucune », "
+    "« RAS », « néant » ou « rien » sont signalées pour vérification "
+    "et ne sont pas supprimées automatiquement."
+)
+
+# ------------------------------------------------------------
+# 10.1 Résumé général
+# ------------------------------------------------------------
+
+st.markdown("### 10.1 Résumé du contrôle")
+
+nb_lignes = len(df_nettoye)
+nb_variables = len(df_nettoye.columns)
+nb_manquants = int(df_nettoye.isna().sum().sum())
+nb_doublons = int(df_nettoye.duplicated().sum())
+
+q1, q2, q3, q4 = st.columns(4)
+
+with q1:
+    st.metric("Lignes", nb_lignes)
+
+with q2:
+    st.metric("Variables", nb_variables)
+
+with q3:
+    st.metric("Cellules manquantes", nb_manquants)
+
+with q4:
+    st.metric("Doublons", nb_doublons)
+
+
+# ------------------------------------------------------------
+# 10.2 Réponses à vérifier
+# ------------------------------------------------------------
+
+st.markdown("### 10.2 Réponses textuelles à vérifier")
+
+valeurs_a_verifier = [
+    "aucun",
+    "aucune",
+    "néant",
+    "neant",
+    "ras",
+    "r.a.s.",
+    "rien",
+    "n'importe quel",
+    "n’importe quel",
+    "ouvert à tous niveaux",
+    "ouvert a tous niveaux"
+]
+
+colonnes_textuelles_controle = (
+    df_nettoye
+    .select_dtypes(include=["object", "string"])
+    .columns
+)
+
+reponses_suspectes = []
+
+for col in colonnes_textuelles_controle:
+
+    serie = (
+        df_nettoye[col]
+        .astype("string")
+        .str.strip()
+        .str.lower()
+    )
+
+    masque = serie.isin(valeurs_a_verifier)
+
+    if masque.any():
+
+        valeurs = (
+            serie[masque]
+            .value_counts()
+            .reset_index()
+        )
+
+        valeurs.columns = [
+            "Réponse",
+            "Effectif"
+        ]
+
+        for _, ligne in valeurs.iterrows():
+
+            reponses_suspectes.append({
+                "Variable": col,
+                "Réponse": ligne["Réponse"],
+                "Effectif": int(ligne["Effectif"])
+            })
+
+if reponses_suspectes:
+
+    tableau_suspect = pd.DataFrame(
+        reponses_suspectes
+    )
+
+    st.warning(
+        "Certaines réponses nécessitent une vérification "
+        "humaine. Elles n'ont pas été supprimées."
+    )
+
+    st.dataframe(
+        tableau_suspect,
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.success(
+        "Aucune réponse textuelle suspecte détectée."
+    )
+
+
+# ------------------------------------------------------------
+# 10.3 Modalités très proches
+# ------------------------------------------------------------
+
+st.markdown("### 10.3 Recherche de modalités potentiellement différentes")
+
+st.write(
+    "Cette vérification recherche notamment des différences "
+    "de casse ou d'espaces pouvant créer artificiellement "
+    "plusieurs modalités."
+)
+
+modalites_proches = []
+
+for col in colonnes_textuelles_controle:
+
+    serie = (
+        df_nettoye[col]
+        .dropna()
+        .astype(str)
+    )
+
+    valeurs_originales = serie.unique()
+
+    groupes = {}
+
+    for valeur in valeurs_originales:
+
+        valeur_normalisee = (
+            valeur
+            .strip()
+            .lower()
+        )
+
+        groupes.setdefault(
+            valeur_normalisee,
+            []
+        ).append(valeur)
+
+    for normalisee, valeurs in groupes.items():
+
+        valeurs_uniques = list(
+            dict.fromkeys(valeurs)
+        )
+
+        if len(valeurs_uniques) > 1:
+
+            modalites_proches.append({
+                "Variable": col,
+                "Formes détectées": " | ".join(
+                    valeurs_uniques
+                )
+            })
+
+if modalites_proches:
+
+    st.warning(
+        "Des modalités semblent différentes uniquement "
+        "à cause de la casse ou des espaces."
+    )
+
+    st.dataframe(
+        pd.DataFrame(modalites_proches),
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.success(
+        "Aucune modalité manifestement similaire détectée."
+    )
+
+
+# ------------------------------------------------------------
+# 10.4 Valeurs quantitatives extrêmes
+# ------------------------------------------------------------
+
+st.markdown("### 10.4 Valeurs quantitatives extrêmes")
+
+st.write(
+    "Une valeur extrême n'est pas automatiquement une erreur. "
+    "Elle est simplement signalée pour vérification."
+)
+
+variables_quant_controle = (
+    dictionnaire_modifie[
+        dictionnaire_modifie[
+            "Type d'analyse"
+        ] == "Quantitative"
+    ]["Variable"].tolist()
+)
+
+valeurs_extremes = []
+
+for col in variables_quant_controle:
+
+    serie = pd.to_numeric(
+        df_nettoye[col],
+        errors="coerce"
+    ).dropna()
+
+    if len(serie) < 4:
+        continue
+
+    q1 = serie.quantile(0.25)
+    q3 = serie.quantile(0.75)
+
+    iqr = q3 - q1
+
+    borne_inf = q1 - 1.5 * iqr
+    borne_sup = q3 + 1.5 * iqr
+
+    masque = (
+        (serie < borne_inf)
+        |
+        (serie > borne_sup)
+    )
+
+    nombre_extremes = int(masque.sum())
+
+    if nombre_extremes > 0:
+
+        valeurs_extremes.append({
+            "Variable": col,
+            "Valeurs extrêmes": nombre_extremes,
+            "Borne inférieure": round(
+                borne_inf,
+                2
+            ),
+            "Borne supérieure": round(
+                borne_sup,
+                2
+            )
+        })
+
+if valeurs_extremes:
+
+    st.warning(
+        "Certaines valeurs sont statistiquement extrêmes "
+        "selon la règle de l'IQR."
+    )
+
+    st.dataframe(
+        pd.DataFrame(valeurs_extremes),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.caption(
+        "Attention : une valeur extrême n'est pas nécessairement "
+        "une erreur de saisie."
+    )
+
+else:
+
+    st.success(
+        "Aucune valeur extrême détectée selon la règle de l'IQR."
+    )
+
+
+# ------------------------------------------------------------
+# 10.5 Contrôle des variables quantitatives
+# ---------------------
