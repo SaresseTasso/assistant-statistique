@@ -6,4 +6,3 @@ openpyxl
 python-docx
 scipy
 scikit-learn
-io
