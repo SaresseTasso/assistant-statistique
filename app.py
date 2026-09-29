@@ -2322,4 +2322,3 @@ st.info(
     "significative ne constitue pas à elle seule une preuve "
     "de causalité."
 )
-```
