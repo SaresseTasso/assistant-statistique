@@ -3259,7 +3259,7 @@ else:
                     "La proposition automatique des thèmes "
                     f"a rencontré une erreur : {e}"
                 )
-                # ============================================================
+# ============================================================
 
 # MODULE 12 — INTERPRÉTATION STATISTIQUE
 
@@ -3281,8 +3281,8 @@ resultats_interpretation = []
 
 st.subheader("12.1. Variables qualitatives")
 
-qualitatives = dictionnaire[
-dictionnaire["Type d'analyse"].astype(str).str.strip().isin(
+qualitatives = dictionnaire_modifie[
+dictionnaire_modifie["Type d'analyse"].astype(str).str.strip().isin(
 ["Qualitative", "Qualitative codée"]
 )
 ]
@@ -3294,15 +3294,15 @@ qualitatives["Type de question"].astype(str).str.strip()
 
 if qualitatives_fermees.empty:
 
-```
+
 st.info(
     "Aucune variable qualitative fermée validée n'a été identifiée."
 )
-```
+
 
 else:
 
-```
+
 for _, ligne in qualitatives_fermees.iterrows():
 
     variable = ligne["Variable"]
@@ -3335,7 +3335,7 @@ for _, ligne in qualitatives_fermees.iterrows():
     })
 
     # ----------------------------------------------------
-    # TABLEAU
+    # TABLEAU DES RESULTATS
     # ----------------------------------------------------
 
     st.markdown("**Tableau des résultats statistiques**")
@@ -3347,7 +3347,7 @@ for _, ligne in qualitatives_fermees.iterrows():
     )
 
     # ----------------------------------------------------
-    # CHOIX DES MODALITÉS À INTERPRÉTER
+    # CHOIX DES MODALITES A INTERPRETER
     # ----------------------------------------------------
 
     nombre_modalites = len(tableau)
@@ -3370,9 +3370,13 @@ for _, ligne in qualitatives_fermees.iterrows():
         modalites.iterrows()
     ):
 
-        modalite = str(ligne_modalite["Modalité"])
+        modalite = str(
+            ligne_modalite["Modalité"]
+        )
 
-        effectif = int(ligne_modalite["Effectif"])
+        effectif = int(
+            ligne_modalite["Effectif"]
+        )
 
         pourcentage = float(
             ligne_modalite["Pourcentage"]
@@ -3428,7 +3432,7 @@ for _, ligne in qualitatives_fermees.iterrows():
     )
 
     # ----------------------------------------------------
-    # INTERPRÉTATION
+    # INTERPRETATION
     # ----------------------------------------------------
 
     st.markdown("**Interprétation :**")
@@ -3442,7 +3446,7 @@ for _, ligne in qualitatives_fermees.iterrows():
     })
 
     st.divider()
-```
+
 
 # ============================================================
 
@@ -3452,22 +3456,21 @@ for _, ligne in qualitatives_fermees.iterrows():
 
 st.subheader("12.2. Variables quantitatives")
 
-quantitatives = dictionnaire[
-dictionnaire["Type d'analyse"].astype(str).str.strip()
+quantitatives = dictionnaire_modifie[
+dictionnaire_modifie["Type d'analyse"].astype(str).str.strip()
 == "Quantitative"
 ]
 
 if quantitatives.empty:
 
-```
+
 st.info(
     "Aucune variable quantitative validée n'a été identifiée."
 )
-```
+
 
 else:
 
-```
 for _, ligne in quantitatives.iterrows():
 
     variable = ligne["Variable"]
@@ -3494,12 +3497,16 @@ for _, ligne in quantitatives.iterrows():
         continue
 
     # ----------------------------------------------------
-    # STATISTIQUES
+    # STATISTIQUES DESCRIPTIVES
     # ----------------------------------------------------
 
-    n_valide = int(serie_valide.count())
+    n_valide = int(
+        serie_valide.count()
+    )
 
-    n_manquants = int(serie.isna().sum())
+    n_manquants = int(
+        serie.isna().sum()
+    )
 
     moyenne = serie_valide.mean()
 
@@ -3518,6 +3525,7 @@ for _, ligne in quantitatives.iterrows():
     iqr = q3 - q1
 
     tableau_quantitatif = pd.DataFrame({
+
         "Indicateur": [
             "Effectif valide",
             "Valeurs manquantes",
@@ -3544,7 +3552,7 @@ for _, ligne in quantitatives.iterrows():
     })
 
     # ----------------------------------------------------
-    # TABLEAU AVANT INTERPRÉTATION
+    # TABLEAU AVANT INTERPRETATION
     # ----------------------------------------------------
 
     st.markdown(
@@ -3558,7 +3566,7 @@ for _, ligne in quantitatives.iterrows():
     )
 
     # ----------------------------------------------------
-    # INTERPRÉTATION
+    # INTERPRETATION
     # ----------------------------------------------------
 
     interpretation = (
@@ -3630,7 +3638,7 @@ for _, ligne in quantitatives.iterrows():
     })
 
     st.divider()
-```
+
 
 # ============================================================
 
@@ -3640,22 +3648,22 @@ for _, ligne in quantitatives.iterrows():
 
 st.subheader("12.3. Questions ouvertes")
 
-questions_ouvertes = dictionnaire[
-dictionnaire["Type de question"].astype(str).str.strip()
+questions_ouvertes = dictionnaire_modifie[
+dictionnaire_modifie["Type de question"].astype(str).str.strip()
 == "Question ouverte"
 ]
 
 if questions_ouvertes.empty:
 
-```
+
 st.info(
     "Aucune question ouverte validée n'a été identifiée."
 )
-```
+
 
 else:
 
-```
+
 st.info(
     "Les questions ouvertes seront interprétées après "
     "validation des thèmes issus de la codification."
@@ -3679,11 +3687,11 @@ for _, ligne in questions_ouvertes.iterrows():
     st.write(
         f"{len(serie_ouverte)} réponse(s) enregistrée(s)."
     )
-```
+
 
 # ============================================================
 
-# 12.4 — SYNTHÈSE
+# 12.4 — SYNTHESE
 
 # ============================================================
 
@@ -3691,7 +3699,7 @@ st.subheader("12.4. Synthèse des interprétations")
 
 if len(resultats_interpretation) > 0:
 
-```
+
 tableau_synthese = pd.DataFrame(
     resultats_interpretation
 )
@@ -3726,21 +3734,22 @@ st.download_button(
     mime=(
         "application/vnd.openxmlformats-officedocument."
         "spreadsheetml.sheet"
-    )
+    ),
+    key="telecharger_interpretations"
 )
-```
+
 
 else:
 
-```
+
 st.info(
     "Aucune interprétation statistique n'est actuellement disponible."
 )
-```
+
 
 # ============================================================
 
-# NOTE MÉTHODOLOGIQUE
+# NOTE METHODOLOGIQUE
 
 # ============================================================
 
