@@ -3259,229 +3259,154 @@ else:
                     "La proposition automatique des thèmes "
                     f"a rencontré une erreur : {e}"
                 )
-# ============================================================
-
+                # ============================================================
 # 12. GÉNÉRATION AUTOMATIQUE DE CONSTATS
-
 # ============================================================
+import io
+import pandas as pd
+import streamlit as st
 
 st.subheader("12. Génération automatique de constats")
 
 st.write(
-"Ce module transforme certains résultats statistiques "
-"en constats descriptifs simples. Les constats générés "
-"doivent être relus avant leur utilisation dans un rapport."
+    "Ce module transforme certains résultats statistiques "
+    "en constats descriptifs simples. Les constats générés "
+    "doivent être relus avant leur utilisation dans un rapport."
 )
 
 constats = []
 
 # ============================================================
-
 # 12.1 CONSTATS SUR LES VARIABLES QUALITATIVES
-
 # ============================================================
-
-st.markdown(
-"### 12.1 Constats descriptifs — variables qualitatives"
-)
+st.markdown("### 12.1 Constats descriptifs — variables qualitatives")
 
 for _, ligne in dictionnaire_modifie.iterrows():
+    variable = ligne["Variable"]
+    type_analyse = ligne["Type d'analyse"]
+    type_question = ligne["Type de question"]
 
+    if (
+        type_analyse in ["Qualitative", "Qualitative codée"]
+        and type_question == "Question fermée"
+    ):
+        if variable not in df_nettoye.columns:
+            continue
 
-variable = ligne["Variable"]
-type_analyse = ligne["Type d'analyse"]
-type_question = ligne["Type de question"]
+        serie = df_nettoye[variable].dropna()
+        if len(serie) == 0:
+            continue
 
-if (
-    type_analyse in ["Qualitative", "Qualitative codée"]
-    and type_question == "Question fermée"
-):
+        frequences = serie.value_counts()
+        modalite_principale = frequences.index[0]
+        effectif_principal = int(frequences.iloc[0])
+        pourcentage_principal = effectif_principal / len(serie) * 100
 
-    if variable not in df_nettoye.columns:
-        continue
-
-    serie = df_nettoye[variable].dropna()
-
-    if len(serie) == 0:
-        continue
-
-    frequences = serie.value_counts()
-
-    modalite_principale = frequences.index[0]
-
-    effectif_principal = int(
-        frequences.iloc[0]
-    )
-
-    pourcentage_principal = (
-        effectif_principal
-        / len(serie)
-        * 100
-    )
-
-    constat = (
-        f"Pour la variable « {variable} », la modalité "
-        f"« {modalite_principale} » est la plus fréquente, "
-        f"avec {effectif_principal} réponse(s), soit "
-        f"{pourcentage_principal:.1f} % des réponses valides."
-    )
-
-    constats.append({
-        "Type": "Descriptif",
-        "Variable": variable,
-        "Constat": constat
-    })
-
-
-# ============================================================
-
-# 12.2 CONSTATS SUR LES VARIABLES QUANTITATIVES
-
-# ============================================================
-
-st.markdown(
-"### 12.2 Constats descriptifs — variables quantitatives"
-)
-
-for _, ligne in dictionnaire_modifie.iterrows():
-
-
-variable = ligne["Variable"]
-
-if ligne["Type d'analyse"] == "Quantitative":
-
-    if variable not in df_nettoye.columns:
-        continue
-
-    serie = pd.to_numeric(
-        df_nettoye[variable],
-        errors="coerce"
-    ).dropna()
-
-    if len(serie) == 0:
-        continue
-
-    moyenne = serie.mean()
-    mediane = serie.median()
-    minimum = serie.min()
-    maximum = serie.max()
-
-    constat = (
-        f"Pour « {variable} », la moyenne est de "
-        f"{moyenne:.2f}, la médiane de {mediane:.2f}, "
-        f"avec des valeurs comprises entre "
-        f"{minimum:.2f} et {maximum:.2f}."
-    )
-
-    constats.append({
-        "Type": "Descriptif",
-        "Variable": variable,
-        "Constat": constat
-    })
-
-# ============================================================
-
-# 12.3 RÈGLES D'INTERPRÉTATION STATISTIQUE
-
-# ============================================================
-
-st.markdown(
-"### 12.3 Règles d'interprétation statistique"
-)
-
-st.info(
-"Une p-value inférieure à 0,05 indique que le résultat "
-"est statistiquement significatif selon le seuil retenu. "
-"Elle ne démontre pas une relation causale."
-)
-
-# ============================================================
-
-# 12.4 AFFICHAGE DES CONSTATS
-
-# ============================================================
-
-st.markdown(
-"### 12.4 Constats générés"
-)
-
-if constats:
-
-
-tableau_constats = pd.DataFrame(
-    constats
-)
-
-st.dataframe(
-    tableau_constats,
-    use_container_width=True,
-    hide_index=True
-)
-
-
-else:
-
-
-st.info(
-    "Aucun constat automatique n'a pu être généré."
-)
-
-
-# ============================================================
-
-# 12.5 TÉLÉCHARGEMENT DES CONSTATS
-
-# ============================================================
-
-if constats:
-
-
-try:
-
-    buffer_constats = io.BytesIO()
-
-    with pd.ExcelWriter(
-        buffer_constats,
-        engine="openpyxl"
-    ) as writer:
-
-        tableau_constats.to_excel(
-            writer,
-            index=False,
-            sheet_name="Constats"
+        constat = (
+            f"Pour la variable « {variable} », la modalité "
+            f"« {modalite_principale} » est la plus fréquente, "
+            f"avec {effectif_principal} réponse(s), soit "
+            f"{pourcentage_principal:.1f} % des réponses valides."
         )
 
-    st.download_button(
-        label="Télécharger les constats Excel",
-        data=buffer_constats.getvalue(),
-        file_name="constats_automatiques.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        key="telecharger_constats"
-    )
-
-except Exception as e:
-
-    st.error(
-        f"Erreur lors de la préparation du fichier : {e}"
-    )
-
+        constats.append({
+            "Type": "Descriptif",
+            "Variable": variable,
+            "Constat": constat,
+        })
 
 # ============================================================
+# 12.2 CONSTATS SUR LES VARIABLES QUANTITATIVES
+# ============================================================
+st.markdown("### 12.2 Constats descriptifs — variables quantitatives")
 
-# 12.6 RAPPEL MÉTHODOLOGIQUE
+for _, ligne in dictionnaire_modifie.iterrows():
+    variable = ligne["Variable"]
+
+    if ligne["Type d'analyse"] == "Quantitative":
+        if variable not in df_nettoye.columns:
+            continue
+
+        serie = pd.to_numeric(
+            df_nettoye[variable], errors="coerce"
+        ).dropna()
+        if len(serie) == 0:
+            continue
+
+        constat = (
+            f"Pour « {variable} », la moyenne est de "
+            f"{serie.mean():.2f}, la médiane de {serie.median():.2f}, "
+            f"avec des valeurs comprises entre "
+            f"{serie.min():.2f} et {serie.max():.2f}."
+        )
+
+        constats.append({
+            "Type": "Descriptif",
+            "Variable": variable,
+            "Constat": constat,
+        })
 
 # ============================================================
+# 12.3 RÈGLES D'INTERPRÉTATION STATISTIQUE
+# ============================================================
+st.markdown("### 12.3 Règles d'interprétation statistique")
 
-st.markdown(
-"### 12.6 Rappel méthodologique"
+st.info(
+    "Une p-value inférieure à 0,05 indique que le résultat "
+    "est statistiquement significatif selon le seuil retenu. "
+    "Elle ne démontre pas une relation causale."
 )
 
+# ============================================================
+# 12.4 AFFICHAGE DES CONSTATS
+# ============================================================
+st.markdown("### 12.4 Constats générés")
+
+tableau_constats = pd.DataFrame(constats)
+
+if constats:
+    st.dataframe(
+        tableau_constats,
+        use_container_width=True,
+        hide_index=True,
+    )
+else:
+    st.info("Aucun constat automatique n'a pu être généré.")
+
+# ============================================================
+# 12.5 TÉLÉCHARGEMENT DES CONSTATS
+# ============================================================
+if constats:
+    try:
+        buffer_constats = io.BytesIO()
+
+        with pd.ExcelWriter(buffer_constats, engine="openpyxl") as writer:
+            tableau_constats.to_excel(
+                writer, index=False, sheet_name="Constats"
+            )
+
+        st.download_button(
+            label="Télécharger les constats Excel",
+            data=buffer_constats.getvalue(),
+            file_name="constats_automatiques.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            key="telecharger_constats",
+        )
+
+    except Exception as e:
+        st.error(f"Erreur lors de la préparation du fichier : {e}")
+
+# ============================================================
+# 12.6 RAPPEL MÉTHODOLOGIQUE
+# ============================================================
+st.markdown("### 12.6 Rappel méthodologique")
+
 st.warning(
-"Les constats automatiques sont des formulations "
-"descriptives basées sur les résultats calculés. "
-"Ils ne remplacent pas l'interprétation scientifique "
-"et ne doivent pas être utilisés pour affirmer une causalité."
+    "Les constats automatiques sont des formulations "
+    "descriptives basées sur les résultats calculés. "
+    "Ils ne remplacent pas l'interprétation scientifique "
+    "et ne doivent pas être utilisés pour affirmer une causalité."
 )
