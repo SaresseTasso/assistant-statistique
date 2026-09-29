@@ -3591,9 +3591,9 @@ for _, ligne in dictionnaire_modifie.iterrows():
 st.markdown(
     "### 12.2 Interprétation des variables quantitatives"
 )
-=================
-INTERPRÉTATION DES VARIABLES QUANTITATIVES
-============================================================
+# =================
+# INTERPRÉTATION DES VARIABLES QUANTITATIVES
+# ============================================================
 
 st.subheader("Interprétation des variables quantitatives")
 
