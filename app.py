@@ -196,12 +196,44 @@ def proposer_type(colonne):
     return "Qualitative"
 
 
+# ============================================================
+# VALIDATION DU TYPE DES VARIABLES
+# ============================================================
+
+types_possibles = [
+    "Qualitative",
+    "Qualitative codée",
+    "Quantitative",
+    "Date",
+    "Identifiant",
+    "À vérifier"
+]
+
 dictionnaire["Type d'analyse"] = [
     proposer_type(col)
     for col in df.columns
 ]
 
-st.dataframe(
+dictionnaire_modifie = st.data_editor(
     dictionnaire,
-    use_container_width=True
-)    
+    column_config={
+        "Type d'analyse": st.column_config.SelectboxColumn(
+            "Type d'analyse",
+            options=types_possibles,
+            required=True
+        )
+    },
+    disabled=[
+        "Variable",
+        "Type Python",
+        "Nombre de modalités",
+        "Valeurs manquantes"
+    ],
+    use_container_width=True,
+    hide_index=True
+)
+
+st.info(
+    "Vérifiez le type d'analyse de chaque variable avant "
+    "de poursuivre l'analyse."
+)
