@@ -3597,17 +3597,21 @@ st.markdown(
 
 st.subheader("Interprétation des variables quantitatives")
 
+st.subheader("Interprétation des variables quantitatives")
+
 quantitatives = dictionnaire[
-dictionnaire["Type d'analyse"].astype(str).str.strip() == "Quantitative"
+    dictionnaire["Type d'analyse"].astype(str).str.strip() == "Quantitative"
 ]["Variable"].tolist()
 
 if not quantitatives:
-st.info("Aucune variable quantitative validée n'a été identifiée.")
+    st.info("Aucune variable quantitative validée n'a été identifiée.")
 else:
-for variable in quantitatives:
+    for variable in quantitatives:
+        if variable not in df_nettoye.columns:
+            continue
 
-    if variable not in df_nettoye.columns:
-        continue
+        serie = pd.to_numeric(df_nettoye[variable], errors="coerce")
+        serie_valide = serie.dropna()
 
     serie = pd.to_numeric(df_nettoye[variable], errors="coerce")
     serie_valide = serie.dropna()
