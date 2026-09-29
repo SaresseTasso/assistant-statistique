@@ -157,3 +157,51 @@ if fichier is not None:
         st.warning(
             f"{nombre_doublons} doublon(s) détecté(s)."
         )
+    # ============================================================
+# DICTIONNAIRE DES VARIABLES
+# ============================================================
+
+st.subheader("Dictionnaire des variables")
+
+dictionnaire = pd.DataFrame({
+    "Variable": df.columns,
+    "Type Python": [
+        str(df[col].dtype)
+        for col in df.columns
+    ],
+    "Nombre de modalités": [
+        df[col].nunique(dropna=True)
+        for col in df.columns
+    ],
+    "Valeurs manquantes": [
+        df[col].isna().sum()
+        for col in df.columns
+    ]
+})
+
+# Proposition automatique du type d'analyse
+def proposer_type(colonne):
+
+    serie = df[colonne]
+
+    # Date
+    if pd.api.types.is_datetime64_any_dtype(serie):
+        return "Date"
+
+    # Numérique
+    if pd.api.types.is_numeric_dtype(serie):
+        return "Quantitative"
+
+    # Texte
+    return "Qualitative"
+
+
+dictionnaire["Type d'analyse"] = [
+    proposer_type(col)
+    for col in df.columns
+]
+
+st.dataframe(
+    dictionnaire,
+    use_container_width=True
+)    
