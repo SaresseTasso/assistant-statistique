@@ -3259,503 +3259,199 @@ else:
                     "La proposition automatique des thèmes "
                     f"a rencontré une erreur : {e}"
                 )
+               
+# ============================================================
+# 12. GÉNÉRATION AUTOMATIQUE DE CONSTATS
 # ============================================================
 
-# MODULE 12 — INTERPRÉTATION STATISTIQUE
-
-# ============================================================
-
-st.header("12. Interprétation statistique")
+st.subheader("12. Génération automatique de constats")
 
 st.write(
-"Les tableaux statistiques sont présentés avant leur interprétation."
+    "Ce module transforme certains résultats statistiques "
+    "en constats descriptifs simples. Les constats générés "
+    "doivent être relus avant leur utilisation dans un rapport."
 )
 
-resultats_interpretation = []
-
-# ============================================================
-
-# 12.1 — VARIABLES QUALITATIVES
-
-# ============================================================
-
-st.subheader("12.1. Variables qualitatives")
-
-qualitatives = dictionnaire_modifie[
-dictionnaire_modifie["Type d'analyse"].astype(str).str.strip().isin(
-["Qualitative", "Qualitative codée"]
-)
-]
-
-qualitatives_fermees = qualitatives[
-qualitatives["Type de question"].astype(str).str.strip()
-== "Question fermée"
-]
-
-    if qualitatives_fermees.empty:
+constats = []
 
 
-st.info(
-    "Aucune variable qualitative fermée validée n'a été identifiée."
-)
+# ------------------------------------------------------------
+# 12.1 Constats sur les variables qualitatives
+# ------------------------------------------------------------
 
+st.markdown("### 12.1 Constats descriptifs — variables qualitatives")
 
-else:
-
-
-for _, ligne in qualitatives_fermees.iterrows():
+for _, ligne in dictionnaire_modifie.iterrows():
 
     variable = ligne["Variable"]
+    type_analyse = ligne["Type d'analyse"]
+    type_question = ligne["Type de question"]
 
-    if variable not in df_nettoye.columns:
-        continue
-
-    st.markdown(f"### {variable}")
-
-    serie = df_nettoye[variable].dropna()
-
-    if len(serie) == 0:
-
-        st.warning(
-            f"Aucune donnée valide disponible pour « {variable} »."
-        )
-
-        continue
-
-    effectifs = serie.value_counts()
-
-    pourcentages = (
-        serie.value_counts(normalize=True) * 100
-    )
-
-    tableau = pd.DataFrame({
-        "Modalité": effectifs.index.astype(str),
-        "Effectif": effectifs.values,
-        "Pourcentage": pourcentages.values.round(2)
-    })
-
-    # ----------------------------------------------------
-    # TABLEAU DES RESULTATS
-    # ----------------------------------------------------
-
-    st.markdown("**Tableau des résultats statistiques**")
-
-    st.dataframe(
-        tableau,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # ----------------------------------------------------
-    # CHOIX DES MODALITES A INTERPRETER
-    # ----------------------------------------------------
-
-    nombre_modalites = len(tableau)
-
-    if nombre_modalites <= 5:
-
-        modalites = tableau.copy()
-
-    elif nombre_modalites <= 10:
-
-        modalites = tableau.head(3).copy()
-
-    else:
-
-        modalites = tableau.head(5).copy()
-
-    phrases = []
-
-    for position, (_, ligne_modalite) in enumerate(
-        modalites.iterrows()
+    if (
+        type_analyse in types_qualitatifs
+        and
+        type_question == "Question fermée"
     ):
 
-        modalite = str(
-            ligne_modalite["Modalité"]
+        serie = df_nettoye[variable].dropna()
+
+        if len(serie) == 0:
+            continue
+
+        frequences = serie.value_counts()
+
+        modalite_principale = frequences.index[0]
+        effectif_principal = int(
+            frequences.iloc[0]
         )
 
-        effectif = int(
-            ligne_modalite["Effectif"]
+        pourcentage_principal = (
+            effectif_principal
+            / len(serie)
+            * 100
         )
 
-        pourcentage = float(
-            ligne_modalite["Pourcentage"]
+        constat = (
+            f"Pour la variable « {variable} », la modalité "
+            f"« {modalite_principale} » est la plus fréquente, "
+            f"avec {effectif_principal} réponse(s), soit "
+            f"{pourcentage_principal:.1f} % des réponses valides."
         )
 
-        if position == 0:
-
-            phrase = (
-                f"La modalité « {modalite} » est la plus représentée, "
-                f"avec {effectif} observation(s), soit "
-                f"{pourcentage:.2f} % des répondants."
-            )
-
-        elif position == 1:
-
-            phrase = (
-                f"Elle est suivie par « {modalite} », "
-                f"qui représente {effectif} observation(s), "
-                f"soit {pourcentage:.2f} %."
-            )
-
-        elif position == 2:
-
-            phrase = (
-                f"Vient ensuite « {modalite} », "
-                f"avec {effectif} observation(s), "
-                f"soit {pourcentage:.2f} %."
-            )
-
-        else:
-
-            phrase = (
-                f"Par ailleurs, « {modalite} » représente "
-                f"{effectif} observation(s), soit "
-                f"{pourcentage:.2f} %."
-            )
-
-        phrases.append(phrase)
-
-    interpretation = " ".join(phrases)
-
-    if nombre_modalites > len(modalites):
-
-        reste = nombre_modalites - len(modalites)
-
-        interpretation += (
-            f" Les {reste} autre(s) modalité(s) sont moins "
-            "représentées dans l'ensemble."
-        )
-
-    interpretation = (
-        "Dans l'ensemble, " + interpretation
-    )
-
-    # ----------------------------------------------------
-    # INTERPRETATION
-    # ----------------------------------------------------
-
-    st.markdown("**Interprétation :**")
-
-    st.write(interpretation)
-
-    resultats_interpretation.append({
-        "Variable": variable,
-        "Type": "Qualitative",
-        "Interprétation": interpretation
-    })
-
-    st.divider()
+        constats.append({
+            "Type": "Descriptif",
+            "Variable": variable,
+            "Constat": constat
+        })
 
 
-# ============================================================
+# ------------------------------------------------------------
+# 12.2 Constats sur les variables quantitatives
+# ------------------------------------------------------------
 
-# 12.2 — VARIABLES QUANTITATIVES
+st.markdown("### 12.2 Constats descriptifs — variables quantitatives")
 
-# ============================================================
-
-st.subheader("12.2. Variables quantitatives")
-
-quantitatives = dictionnaire_modifie[
-dictionnaire_modifie["Type d'analyse"].astype(str).str.strip()
-== "Quantitative"
-]
-
-if quantitatives.empty:
-
-
-st.info(
-    "Aucune variable quantitative validée n'a été identifiée."
-)
-
-
-else:
-
-for _, ligne in quantitatives.iterrows():
+for _, ligne in dictionnaire_modifie.iterrows():
 
     variable = ligne["Variable"]
 
-    if variable not in df_nettoye.columns:
-        continue
+    if ligne["Type d'analyse"] == "Quantitative":
 
-    st.markdown(f"### {variable}")
+        serie = pd.to_numeric(
+            df_nettoye[variable],
+            errors="coerce"
+        ).dropna()
 
-    serie = pd.to_numeric(
-        df_nettoye[variable],
-        errors="coerce"
-    )
+        if len(serie) == 0:
+            continue
 
-    serie_valide = serie.dropna()
+        moyenne = serie.mean()
+        mediane = serie.median()
+        minimum = serie.min()
+        maximum = serie.max()
 
-    if len(serie_valide) == 0:
-
-        st.warning(
-            f"Impossible d'interpréter « {variable} » : "
-            "aucune valeur numérique valide."
+        constat = (
+            f"Pour « {variable} », la moyenne est de "
+            f"{moyenne:.2f}, la médiane de {mediane:.2f}, "
+            f"avec des valeurs comprises entre "
+            f"{minimum:.2f} et {maximum:.2f}."
         )
 
-        continue
+        constats.append({
+            "Type": "Descriptif",
+            "Variable": variable,
+            "Constat": constat
+        })
 
-    # ----------------------------------------------------
-    # STATISTIQUES DESCRIPTIVES
-    # ----------------------------------------------------
 
-    n_valide = int(
-        serie_valide.count()
-    )
+# ------------------------------------------------------------
+# 12.3 Analyse des constats bivariés
+# ------------------------------------------------------------
 
-    n_manquants = int(
-        serie.isna().sum()
-    )
+st.markdown("### 12.3 Règles d'interprétation statistique")
 
-    moyenne = serie_valide.mean()
+st.info(
+    "Une p-value inférieure à 0,05 indique que le résultat "
+    "est statistiquement significatif selon le seuil retenu. "
+    "Elle ne démontre pas une relation causale."
+)
 
-    mediane = serie_valide.median()
 
-    ecart_type = serie_valide.std()
+# ------------------------------------------------------------
+# 12.4 Affichage des constats
+# ------------------------------------------------------------
 
-    minimum = serie_valide.min()
+st.markdown("### 12.4 Constats générés")
 
-    q1 = serie_valide.quantile(0.25)
+if constats:
 
-    q3 = serie_valide.quantile(0.75)
-
-    maximum = serie_valide.max()
-
-    iqr = q3 - q1
-
-    tableau_quantitatif = pd.DataFrame({
-
-        "Indicateur": [
-            "Effectif valide",
-            "Valeurs manquantes",
-            "Moyenne",
-            "Médiane",
-            "Écart-type",
-            "Minimum",
-            "1er quartile (Q1)",
-            "3e quartile (Q3)",
-            "Maximum"
-        ],
-
-        "Valeur": [
-            n_valide,
-            n_manquants,
-            round(moyenne, 2),
-            round(mediane, 2),
-            round(ecart_type, 2),
-            round(minimum, 2),
-            round(q1, 2),
-            round(q3, 2),
-            round(maximum, 2)
-        ]
-    })
-
-    # ----------------------------------------------------
-    # TABLEAU AVANT INTERPRETATION
-    # ----------------------------------------------------
-
-    st.markdown(
-        "**Tableau des statistiques descriptives**"
+    tableau_constats = pd.DataFrame(
+        constats
     )
 
     st.dataframe(
-        tableau_quantitatif,
+        tableau_constats,
         use_container_width=True,
         hide_index=True
     )
 
-    # ----------------------------------------------------
-    # INTERPRETATION
-    # ----------------------------------------------------
-
-    interpretation = (
-        f"Sur les {n_valide} observations valides, "
-        f"la variable « {variable} » présente une moyenne "
-        f"de {moyenne:.2f} et une médiane de {mediane:.2f}. "
-    )
-
-    if moyenne > mediane:
-
-        interpretation += (
-            "La moyenne étant supérieure à la médiane, "
-            "la distribution présente une tendance vers "
-            "les valeurs élevées. "
-        )
-
-    elif moyenne < mediane:
-
-        interpretation += (
-            "La moyenne étant inférieure à la médiane, "
-            "la distribution présente une tendance vers "
-            "les valeurs faibles. "
-        )
-
-    else:
-
-        interpretation += (
-            "La moyenne et la médiane sont identiques ou "
-            "très proches. "
-        )
-
-    interpretation += (
-        f"Par ailleurs, l'écart-type est de "
-        f"{ecart_type:.2f}, avec des valeurs comprises "
-        f"entre {minimum:.2f} et {maximum:.2f}. "
-    )
-
-    interpretation += (
-        f"Les 50 % centraux des observations se situent "
-        f"entre {q1:.2f} et {q3:.2f}, soit une étendue "
-        f"interquartile de {iqr:.2f}. "
-    )
-
-    if n_manquants > 0:
-
-        taux_manquants = (
-            n_manquants / len(serie)
-        ) * 100
-
-        interpretation += (
-            f"Enfin, {n_manquants} valeur(s), soit "
-            f"{taux_manquants:.2f} %, sont manquantes."
-        )
-
-    else:
-
-        interpretation += (
-            "Aucune valeur manquante n'a été relevée."
-        )
-
-    st.markdown("**Interprétation :**")
-
-    st.write(interpretation)
-
-    resultats_interpretation.append({
-        "Variable": variable,
-        "Type": "Quantitative",
-        "Interprétation": interpretation
-    })
-
-    st.divider()
-
-
-# ============================================================
-
-# 12.3 — QUESTIONS OUVERTES
-
-# ============================================================
-
-st.subheader("12.3. Questions ouvertes")
-
-questions_ouvertes = dictionnaire_modifie[
-dictionnaire_modifie["Type de question"].astype(str).str.strip()
-== "Question ouverte"
-]
-
-if questions_ouvertes.empty:
-
-
-st.info(
-    "Aucune question ouverte validée n'a été identifiée."
-)
-
-
 else:
 
-
-st.info(
-    "Les questions ouvertes seront interprétées après "
-    "validation des thèmes issus de la codification."
-)
-
-for _, ligne in questions_ouvertes.iterrows():
-
-    variable = ligne["Variable"]
-
-    if variable not in df_nettoye.columns:
-        continue
-
-    st.markdown(f"### {variable}")
-
-    serie_ouverte = (
-        df_nettoye[variable]
-        .dropna()
-        .astype(str)
-    )
-
-    st.write(
-        f"{len(serie_ouverte)} réponse(s) enregistrée(s)."
+    st.info(
+        "Aucun constat automatique n'a pu être généré."
     )
 
 
-# ============================================================
+# ------------------------------------------------------------
+# 12.5 Téléchargement des constats
+# ------------------------------------------------------------
 
-# 12.4 — SYNTHESE
+if constats:
 
-# ============================================================
+    try:
 
-st.subheader("12.4. Synthèse des interprétations")
+        buffer_constats = io.BytesIO()
 
-if len(resultats_interpretation) > 0:
+        with pd.ExcelWriter(
+            buffer_constats,
+            engine="openpyxl"
+        ) as writer:
 
+            tableau_constats.to_excel(
+                writer,
+                index=False,
+                sheet_name="Constats"
+            )
 
-tableau_synthese = pd.DataFrame(
-    resultats_interpretation
-)
+        st.download_button(
+            label="Télécharger les constats Excel",
+            data=buffer_constats.getvalue(),
+            file_name="constats_automatiques.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            key="telecharger_constats"
+        )
 
-st.dataframe(
-    tableau_synthese,
-    use_container_width=True,
-    hide_index=True
-)
+    except Exception as e:
 
-# --------------------------------------------------------
-# EXPORT EXCEL
-# --------------------------------------------------------
-
-fichier_interpretations = io.BytesIO()
-
-with pd.ExcelWriter(
-    fichier_interpretations,
-    engine="openpyxl"
-) as writer:
-
-    tableau_synthese.to_excel(
-        writer,
-        index=False,
-        sheet_name="Interprétations"
-    )
-
-st.download_button(
-    label="Télécharger les interprétations (Excel)",
-    data=fichier_interpretations.getvalue(),
-    file_name="interpretations_statistiques.xlsx",
-    mime=(
-        "application/vnd.openxmlformats-officedocument."
-        "spreadsheetml.sheet"
-    ),
-    key="telecharger_interpretations"
-)
+        st.error(
+            f"Erreur lors de la préparation du fichier : {e}"
+        )
 
 
-else:
+# ------------------------------------------------------------
+# 12.6 Rappel méthodologique
+# ------------------------------------------------------------
 
+st.markdown("### 12.6 Rappel méthodologique")
 
-st.info(
-    "Aucune interprétation statistique n'est actuellement disponible."
-)
-
-
-# ============================================================
-
-# NOTE METHODOLOGIQUE
-
-# ============================================================
-
-st.caption(
-"Les interprétations sont descriptives. Elles ne permettent "
-"pas, à elles seules, d'établir une relation causale."
+st.warning(
+    "Les constats automatiques sont des formulations "
+    "descriptives basées sur les résultats calculés. "
+    "Ils ne remplacent pas l'interprétation scientifique "
+    "et ne doivent pas être utilisés pour affirmer une causalité."
 )
 
 
