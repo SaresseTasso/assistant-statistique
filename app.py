@@ -3259,11 +3259,7 @@ else:
                     "La proposition automatique des thèmes "
                     f"a rencontré une erreur : {e}"
                 )
-
-# ============================================================
-# MODULE 12 — INTERPRÉTATION STATISTIQUE
-# ============================================================
-# ============================================================
+                # ============================================================
 
 # MODULE 12 — INTERPRÉTATION STATISTIQUE
 
@@ -3272,117 +3268,8 @@ else:
 st.header("12. Interprétation statistique")
 
 st.write(
-"Cette section présente les résultats statistiques avant leur "
-"interprétation. Les tableaux permettent de consulter les résultats "
-"bruts et l'interprétation apporte une lecture structurée des principaux constats."
+"Les tableaux statistiques sont présentés avant leur interprétation."
 )
-
-# ============================================================
-
-# FONCTIONS UTILITAIRES
-
-# ============================================================
-
-def choisir_modalites_a_interpreter(tableau):
-nombre_modalites = len(tableau)
-
-```
-if nombre_modalites <= 5:
-    return tableau.copy()
-
-elif nombre_modalites <= 10:
-    return tableau.head(3).copy()
-
-else:
-    return tableau.head(5).copy()
-```
-
-def generer_interpretation_qualitative(variable, serie):
-
-```
-serie = serie.dropna()
-
-if len(serie) == 0:
-    return (
-        f"Aucune observation valide n'est disponible pour "
-        f"la variable « {variable} »."
-    )
-
-effectifs = serie.value_counts()
-
-pourcentages = serie.value_counts(normalize=True) * 100
-
-tableau = pd.DataFrame({
-    "Modalité": effectifs.index.astype(str),
-    "Effectif": effectifs.values,
-    "Pourcentage": pourcentages.values
-})
-
-tableau["Pourcentage"] = tableau["Pourcentage"].round(2)
-
-modalites = choisir_modalites_a_interpreter(tableau)
-
-phrases = []
-
-for position, (_, ligne) in enumerate(modalites.iterrows()):
-
-    modalite = str(ligne["Modalité"])
-    effectif = int(ligne["Effectif"])
-    pourcentage = float(ligne["Pourcentage"])
-
-    if position == 0:
-
-        phrase = (
-            f"La modalité « {modalite} » est la plus représentée, "
-            f"avec {effectif} observation(s), soit "
-            f"{pourcentage:.2f} % des répondants."
-        )
-
-    elif position == 1:
-
-        phrase = (
-            f"Elle est suivie par la modalité « {modalite} », "
-            f"qui concerne {effectif} observation(s), soit "
-            f"{pourcentage:.2f} %."
-        )
-
-    elif position == 2:
-
-        phrase = (
-            f"Vient ensuite la modalité « {modalite} », "
-            f"représentant {effectif} observation(s), soit "
-            f"{pourcentage:.2f} %."
-        )
-
-    else:
-
-        phrase = (
-            f"Par ailleurs, la modalité « {modalite} » "
-            f"représente {effectif} observation(s), soit "
-            f"{pourcentage:.2f} %."
-        )
-
-    phrases.append(phrase)
-
-interpretation = " ".join(phrases)
-
-if len(tableau) > len(modalites):
-
-    restantes = len(tableau) - len(modalites)
-
-    interpretation += (
-        f" Les {restantes} autre(s) modalité(s) sont moins "
-        "représentées dans l'ensemble des observations."
-    )
-
-return "Dans l'ensemble, " + interpretation
-```
-
-# ============================================================
-
-# LISTE DES RÉSULTATS D'INTERPRÉTATION
-
-# ============================================================
 
 resultats_interpretation = []
 
@@ -3392,7 +3279,7 @@ resultats_interpretation = []
 
 # ============================================================
 
-st.subheader("12.1. Interprétation des variables qualitatives")
+st.subheader("12.1. Variables qualitatives")
 
 qualitatives = dictionnaire[
 dictionnaire["Type d'analyse"].astype(str).str.strip().isin(
@@ -3409,17 +3296,16 @@ if qualitatives_fermees.empty:
 
 ```
 st.info(
-    "Aucune variable qualitative fermée validée "
-    "n'a été identifiée."
+    "Aucune variable qualitative fermée validée n'a été identifiée."
 )
 ```
 
 else:
 
 ```
-for _, ligne_dictionnaire in qualitatives_fermees.iterrows():
+for _, ligne in qualitatives_fermees.iterrows():
 
-    variable = ligne_dictionnaire["Variable"]
+    variable = ligne["Variable"]
 
     if variable not in df_nettoye.columns:
         continue
@@ -3442,30 +3328,108 @@ for _, ligne_dictionnaire in qualitatives_fermees.iterrows():
         serie.value_counts(normalize=True) * 100
     )
 
-    tableau_qualitatif = pd.DataFrame({
+    tableau = pd.DataFrame({
         "Modalité": effectifs.index.astype(str),
         "Effectif": effectifs.values,
-        "Pourcentage": pourcentages.values
+        "Pourcentage": pourcentages.values.round(2)
     })
 
-    tableau_qualitatif["Pourcentage"] = (
-        tableau_qualitatif["Pourcentage"].round(2)
-    )
+    # ----------------------------------------------------
+    # TABLEAU
+    # ----------------------------------------------------
 
-    st.markdown(
-        "**Tableau des résultats statistiques**"
-    )
+    st.markdown("**Tableau des résultats statistiques**")
 
     st.dataframe(
-        tableau_qualitatif,
+        tableau,
         use_container_width=True,
         hide_index=True
     )
 
-    interpretation = generer_interpretation_qualitative(
-        variable,
-        serie
+    # ----------------------------------------------------
+    # CHOIX DES MODALITÉS À INTERPRÉTER
+    # ----------------------------------------------------
+
+    nombre_modalites = len(tableau)
+
+    if nombre_modalites <= 5:
+
+        modalites = tableau.copy()
+
+    elif nombre_modalites <= 10:
+
+        modalites = tableau.head(3).copy()
+
+    else:
+
+        modalites = tableau.head(5).copy()
+
+    phrases = []
+
+    for position, (_, ligne_modalite) in enumerate(
+        modalites.iterrows()
+    ):
+
+        modalite = str(ligne_modalite["Modalité"])
+
+        effectif = int(ligne_modalite["Effectif"])
+
+        pourcentage = float(
+            ligne_modalite["Pourcentage"]
+        )
+
+        if position == 0:
+
+            phrase = (
+                f"La modalité « {modalite} » est la plus représentée, "
+                f"avec {effectif} observation(s), soit "
+                f"{pourcentage:.2f} % des répondants."
+            )
+
+        elif position == 1:
+
+            phrase = (
+                f"Elle est suivie par « {modalite} », "
+                f"qui représente {effectif} observation(s), "
+                f"soit {pourcentage:.2f} %."
+            )
+
+        elif position == 2:
+
+            phrase = (
+                f"Vient ensuite « {modalite} », "
+                f"avec {effectif} observation(s), "
+                f"soit {pourcentage:.2f} %."
+            )
+
+        else:
+
+            phrase = (
+                f"Par ailleurs, « {modalite} » représente "
+                f"{effectif} observation(s), soit "
+                f"{pourcentage:.2f} %."
+            )
+
+        phrases.append(phrase)
+
+    interpretation = " ".join(phrases)
+
+    if nombre_modalites > len(modalites):
+
+        reste = nombre_modalites - len(modalites)
+
+        interpretation += (
+            f" Les {reste} autre(s) modalité(s) sont moins "
+            "représentées dans l'ensemble."
+        )
+
+    interpretation = (
+        "Dans l'ensemble, " + interpretation
     )
+
+    # ----------------------------------------------------
+    # INTERPRÉTATION
+    # ----------------------------------------------------
 
     st.markdown("**Interprétation :**")
 
@@ -3486,7 +3450,7 @@ for _, ligne_dictionnaire in qualitatives_fermees.iterrows():
 
 # ============================================================
 
-st.subheader("12.2. Interprétation des variables quantitatives")
+st.subheader("12.2. Variables quantitatives")
 
 quantitatives = dictionnaire[
 dictionnaire["Type d'analyse"].astype(str).str.strip()
@@ -3497,17 +3461,16 @@ if quantitatives.empty:
 
 ```
 st.info(
-    "Aucune variable quantitative validée "
-    "n'a été identifiée."
+    "Aucune variable quantitative validée n'a été identifiée."
 )
 ```
 
 else:
 
 ```
-for _, ligne_dictionnaire in quantitatives.iterrows():
+for _, ligne in quantitatives.iterrows():
 
-    variable = ligne_dictionnaire["Variable"]
+    variable = ligne["Variable"]
 
     if variable not in df_nettoye.columns:
         continue
@@ -3531,7 +3494,7 @@ for _, ligne_dictionnaire in quantitatives.iterrows():
         continue
 
     # ----------------------------------------------------
-    # CALCUL DES STATISTIQUES
+    # STATISTIQUES
     # ----------------------------------------------------
 
     n_valide = int(serie_valide.count())
@@ -3552,11 +3515,7 @@ for _, ligne_dictionnaire in quantitatives.iterrows():
 
     maximum = serie_valide.max()
 
-    etendue_interquartile = q3 - q1
-
-    # ----------------------------------------------------
-    # TABLEAU DES STATISTIQUES DESCRIPTIVES
-    # ----------------------------------------------------
+    iqr = q3 - q1
 
     tableau_quantitatif = pd.DataFrame({
         "Indicateur": [
@@ -3576,15 +3535,17 @@ for _, ligne_dictionnaire in quantitatives.iterrows():
             n_manquants,
             round(moyenne, 2),
             round(mediane, 2),
-            round(ecart_type, 2)
-            if pd.notna(ecart_type)
-            else np.nan,
+            round(ecart_type, 2),
             round(minimum, 2),
             round(q1, 2),
             round(q3, 2),
             round(maximum, 2)
         ]
     })
+
+    # ----------------------------------------------------
+    # TABLEAU AVANT INTERPRÉTATION
+    # ----------------------------------------------------
 
     st.markdown(
         "**Tableau des statistiques descriptives**"
@@ -3610,38 +3571,35 @@ for _, ligne_dictionnaire in quantitatives.iterrows():
 
         interpretation += (
             "La moyenne étant supérieure à la médiane, "
-            "la distribution présente une tendance à être "
-            "tirée vers les valeurs élevées. "
+            "la distribution présente une tendance vers "
+            "les valeurs élevées. "
         )
 
     elif moyenne < mediane:
 
         interpretation += (
             "La moyenne étant inférieure à la médiane, "
-            "la distribution présente une tendance à être "
-            "tirée vers les valeurs faibles. "
+            "la distribution présente une tendance vers "
+            "les valeurs faibles. "
         )
 
     else:
 
         interpretation += (
             "La moyenne et la médiane sont identiques ou "
-            "très proches, ce qui traduit une position "
-            "centrale similaire selon ces deux indicateurs. "
+            "très proches. "
         )
 
-    if pd.notna(ecart_type):
-
-        interpretation += (
-            f"Par ailleurs, l'écart-type est de "
-            f"{ecart_type:.2f}, avec des valeurs comprises "
-            f"entre {minimum:.2f} et {maximum:.2f}. "
-        )
+    interpretation += (
+        f"Par ailleurs, l'écart-type est de "
+        f"{ecart_type:.2f}, avec des valeurs comprises "
+        f"entre {minimum:.2f} et {maximum:.2f}. "
+    )
 
     interpretation += (
         f"Les 50 % centraux des observations se situent "
         f"entre {q1:.2f} et {q3:.2f}, soit une étendue "
-        f"interquartile de {etendue_interquartile:.2f}. "
+        f"interquartile de {iqr:.2f}. "
     )
 
     if n_manquants > 0:
@@ -3652,15 +3610,13 @@ for _, ligne_dictionnaire in quantitatives.iterrows():
 
         interpretation += (
             f"Enfin, {n_manquants} valeur(s), soit "
-            f"{taux_manquants:.2f} % des observations, "
-            "sont manquantes pour cette variable."
+            f"{taux_manquants:.2f} %, sont manquantes."
         )
 
     else:
 
         interpretation += (
-            "Aucune valeur manquante n'a été relevée "
-            "pour cette variable."
+            "Aucune valeur manquante n'a été relevée."
         )
 
     st.markdown("**Interprétation :**")
@@ -3682,7 +3638,7 @@ for _, ligne_dictionnaire in quantitatives.iterrows():
 
 # ============================================================
 
-st.subheader("12.3. Interprétation des questions ouvertes")
+st.subheader("12.3. Questions ouvertes")
 
 questions_ouvertes = dictionnaire[
 dictionnaire["Type de question"].astype(str).str.strip()
@@ -3693,8 +3649,7 @@ if questions_ouvertes.empty:
 
 ```
 st.info(
-    "Aucune question ouverte validée "
-    "n'a été identifiée."
+    "Aucune question ouverte validée n'a été identifiée."
 )
 ```
 
@@ -3702,14 +3657,13 @@ else:
 
 ```
 st.info(
-    "L'interprétation des questions ouvertes intervient "
-    "après la validation des thèmes proposés par le "
-    "module de codification automatique."
+    "Les questions ouvertes seront interprétées après "
+    "validation des thèmes issus de la codification."
 )
 
-for _, ligne_dictionnaire in questions_ouvertes.iterrows():
+for _, ligne in questions_ouvertes.iterrows():
 
-    variable = ligne_dictionnaire["Variable"]
+    variable = ligne["Variable"]
 
     if variable not in df_nettoye.columns:
         continue
@@ -3722,28 +3676,14 @@ for _, ligne_dictionnaire in questions_ouvertes.iterrows():
         .astype(str)
     )
 
-    if len(serie_ouverte) == 0:
-
-        st.warning(
-            "Aucune réponse exploitable pour cette question."
-        )
-
-    else:
-
-        st.write(
-            f"{len(serie_ouverte)} réponse(s) enregistrée(s)."
-        )
-
-        st.info(
-            "La lecture statistique sera produite après "
-            "validation des thèmes issus de la codification "
-            "automatique."
-        )
+    st.write(
+        f"{len(serie_ouverte)} réponse(s) enregistrée(s)."
+    )
 ```
 
 # ============================================================
 
-# 12.4 — SYNTHÈSE DES INTERPRÉTATIONS
+# 12.4 — SYNTHÈSE
 
 # ============================================================
 
@@ -3766,44 +3706,35 @@ st.dataframe(
 # EXPORT EXCEL
 # --------------------------------------------------------
 
-try:
+fichier_interpretations = io.BytesIO()
 
-    fichier_interpretations = io.BytesIO()
+with pd.ExcelWriter(
+    fichier_interpretations,
+    engine="openpyxl"
+) as writer:
 
-    with pd.ExcelWriter(
-        fichier_interpretations,
-        engine="openpyxl"
-    ) as writer:
-
-        tableau_synthese.to_excel(
-            writer,
-            index=False,
-            sheet_name="Interprétations"
-        )
-
-    st.download_button(
-        label="Télécharger les interprétations (Excel)",
-        data=fichier_interpretations.getvalue(),
-        file_name="interpretations_statistiques.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        )
+    tableau_synthese.to_excel(
+        writer,
+        index=False,
+        sheet_name="Interprétations"
     )
 
-except Exception as erreur:
-
-    st.warning(
-        f"Impossible de générer le fichier Excel : {erreur}"
+st.download_button(
+    label="Télécharger les interprétations (Excel)",
+    data=fichier_interpretations.getvalue(),
+    file_name="interpretations_statistiques.xlsx",
+    mime=(
+        "application/vnd.openxmlformats-officedocument."
+        "spreadsheetml.sheet"
     )
+)
 ```
 
 else:
 
 ```
 st.info(
-    "Aucune interprétation statistique "
-    "n'est actuellement disponible."
+    "Aucune interprétation statistique n'est actuellement disponible."
 )
 ```
 
@@ -3815,6 +3746,7 @@ st.info(
 
 st.caption(
 "Les interprétations sont descriptives. Elles ne permettent "
-"pas, à elles seules, d'établir une relation causale entre "
-"les variables."
+"pas, à elles seules, d'établir une relation causale."
 )
+
+
