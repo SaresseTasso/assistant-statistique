@@ -3604,7 +3604,6 @@ dictionnaire["Type d'analyse"].astype(str).str.strip() == "Quantitative"
 if not quantitatives:
 st.info("Aucune variable quantitative validée n'a été identifiée.")
 else:
-
 for variable in quantitatives:
 
     if variable not in df_nettoye.columns:
@@ -3662,7 +3661,6 @@ for variable in quantitatives:
         ]
     })
 
-    # Le tableau est affiché AVANT toute interprétation
     st.dataframe(
         tableau_quantitatif,
         use_container_width=True,
@@ -3679,7 +3677,6 @@ for variable in quantitatives:
         f"et une médiane de {mediane:.2f}. "
     )
 
-    # Comparaison moyenne / médiane
     if moyenne > mediane:
         interpretation += (
             "La moyenne étant supérieure à la médiane, "
@@ -3699,7 +3696,6 @@ for variable in quantitatives:
             "selon ces deux indicateurs. "
         )
 
-    # Dispersion
     if pd.notna(ecart_type):
         interpretation += (
             f"Par ailleurs, l'écart-type est de {ecart_type:.2f}, "
@@ -3707,7 +3703,6 @@ for variable in quantitatives:
             f"{maximum:.2f}. "
         )
 
-    # Étendue interquartile
     iqr = q3 - q1
 
     interpretation += (
@@ -3716,7 +3711,6 @@ for variable in quantitatives:
         f"de {iqr:.2f}. "
     )
 
-    # Données manquantes
     if n_manquants > 0:
         taux_manquants = (n_manquants / len(serie)) * 100
 
