@@ -3292,7 +3292,7 @@ qualitatives["Type de question"].astype(str).str.strip()
 == "Question fermée"
 ]
 
-if qualitatives_fermees.empty:
+    if qualitatives_fermees.empty:
 
 
 st.info(
