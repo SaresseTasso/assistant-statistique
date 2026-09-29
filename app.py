@@ -214,8 +214,11 @@ dictionnaire["Type d'analyse"] = [
     for col in df.columns
 ]
 
+if "dictionnaire_modifie" not in st.session_state:
+    st.session_state["dictionnaire_modifie"] = dictionnaire.copy()
+
 dictionnaire_modifie = st.data_editor(
-    dictionnaire,
+    st.session_state["dictionnaire_modifie"],
     column_config={
         "Type d'analyse": st.column_config.SelectboxColumn(
             "Type d'analyse",
