@@ -3340,7 +3340,7 @@ nom_variable,
 table_frequences,
 nombre_manquants=0
 ):
-
+"""
 Génère une interprétation descriptive adaptée à la distribution
 d'une variable qualitative.
 
@@ -3352,7 +3352,7 @@ Règles :
 - forte proportion de valeurs manquantes : avertissement ;
 - distribution équilibrée : formulation spécifique ;
 - forte domination d'une modalité : formulation spécifique.
-
+""
 if table_frequences is None or table_frequences.empty:
     return (
         f"Aucune interprétation ne peut être produite pour "
