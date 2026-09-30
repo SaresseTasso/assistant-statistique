@@ -3340,7 +3340,7 @@ nom_variable,
 table_frequences,
 nombre_manquants=0
 ):
-"""
+
 Génère une interprétation descriptive adaptée à la distribution
 d'une variable qualitative.
 
