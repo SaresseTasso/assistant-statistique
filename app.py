@@ -2669,3 +2669,296 @@ st.warning(
     "Ils ne remplacent pas l'interprétation scientifique "
     "et ne doivent pas être utilisés pour affirmer une causalité."
 )
+
+
+# ============================================================
+# 13. EXPORT PROFESSIONNEL WORD
+# ============================================================
+
+st.markdown("## 13. Export professionnel du rapport")
+st.write(
+    "Cette première version génère un rapport Word structuré à partir "
+    "des données nettoyées, du dictionnaire des variables, des résultats "
+    "descriptifs et des constats automatiques disponibles."
+)
+
+
+def _word_set_cell_text(cell, text, bold=False):
+    cell.text = str(text)
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            run.bold = bold
+            run.font.size = Pt(9)
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+
+
+def _word_add_table(doc, dataframe, title=None, max_rows=200):
+    if dataframe is None or dataframe.empty:
+        return
+
+    if title:
+        doc.add_heading(title, level=3)
+
+    df_export = dataframe.copy().head(max_rows)
+    table = doc.add_table(
+        rows=1,
+        cols=len(df_export.columns)
+    )
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.style = "Table Grid"
+
+    for i, col in enumerate(df_export.columns):
+        _word_set_cell_text(table.rows[0].cells[i], col, bold=True)
+
+    for _, row in df_export.iterrows():
+        cells = table.add_row().cells
+        for i, value in enumerate(row):
+            if pd.isna(value):
+                value = ""
+            _word_set_cell_text(cells[i], value)
+
+    if len(dataframe) > max_rows:
+        p = doc.add_paragraph()
+        p.add_run(
+            f"Note : seules les {max_rows} premières lignes sont affichées dans le rapport Word. "
+            "Le fichier Excel reste disponible pour l'ensemble des données."
+        ).italic = True
+
+
+def _word_add_page_number(paragraph):
+    run = paragraph.add_run()
+    fld_char1 = OxmlElement("w:fldChar")
+    fld_char1.set(qn("w:fldCharType"), "begin")
+    instr_text = OxmlElement("w:instrText")
+    instr_text.set(qn("xml:space"), "preserve")
+    instr_text.text = "PAGE"
+    fld_char2 = OxmlElement("w:fldChar")
+    fld_char2.set(qn("w:fldCharType"), "end")
+    run._r.append(fld_char1)
+    run._r.append(instr_text)
+    run._r.append(fld_char2)
+
+
+def generer_rapport_word():
+    doc = Document()
+
+    # Marges professionnelles
+    for section in doc.sections:
+        section.top_margin = Inches(0.75)
+        section.bottom_margin = Inches(0.75)
+        section.left_margin = Inches(0.85)
+        section.right_margin = Inches(0.85)
+
+    # Style général
+    styles = doc.styles
+    styles["Normal"].font.name = "Arial"
+    styles["Normal"].font.size = Pt(10)
+    styles["Title"].font.name = "Arial"
+    styles["Title"].font.size = Pt(22)
+    styles["Heading 1"].font.name = "Arial"
+    styles["Heading 1"].font.size = Pt(15)
+    styles["Heading 2"].font.name = "Arial"
+    styles["Heading 2"].font.size = Pt(12)
+    styles["Heading 3"].font.name = "Arial"
+    styles["Heading 3"].font.size = Pt(11)
+
+    # En-tête et pied de page
+    for section in doc.sections:
+        header = section.header.paragraphs[0]
+        header.text = "Rapport d'analyse statistique"
+        header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        for run in header.runs:
+            run.font.name = "Arial"
+            run.font.size = Pt(8)
+
+        footer = section.footer.paragraphs[0]
+        footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        footer.add_run("Page ")
+        _word_add_page_number(footer)
+
+    # Page de garde
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.space_after = Pt(50)
+
+    title = doc.add_paragraph()
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = title.add_run("RAPPORT D'ANALYSE STATISTIQUE")
+    run.bold = True
+    run.font.name = "Arial"
+    run.font.size = Pt(22)
+
+    subtitle = doc.add_paragraph()
+    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = subtitle.add_run("Analyse descriptive et synthèse automatique des résultats")
+    run.font.name = "Arial"
+    run.font.size = Pt(13)
+
+    doc.add_paragraph()
+    meta = doc.add_table(rows=0, cols=2)
+    meta.style = "Table Grid"
+    meta.alignment = WD_TABLE_ALIGNMENT.CENTER
+    infos = [
+        ("Fichier analysé", nom_fichier),
+        ("Date de génération", datetime.now().strftime("%d/%m/%Y à %H:%M")),
+        ("Nombre d'observations", len(df_nettoye)),
+        ("Nombre de variables", len(df_nettoye.columns)),
+    ]
+    for label, value in infos:
+        cells = meta.add_row().cells
+        _word_set_cell_text(cells[0], label, bold=True)
+        _word_set_cell_text(cells[1], value)
+
+    doc.add_page_break()
+
+    # 1. Présentation des données
+    doc.add_heading("1. Présentation des données", level=1)
+    doc.add_paragraph(
+        "Le présent rapport synthétise les résultats produits par l'assistant "
+        "statistique à partir du fichier importé. Les analyses sont réalisées "
+        "sur la version des données actuellement retenue dans l'application."
+    )
+
+    resume = pd.DataFrame({
+        "Indicateur": [
+            "Nombre d'observations",
+            "Nombre de variables",
+            "Cellules manquantes",
+            "Doublons exacts",
+        ],
+        "Valeur": [
+            len(df_nettoye),
+            len(df_nettoye.columns),
+            int(df_nettoye.isna().sum().sum()),
+            int(df_nettoye.duplicated().sum()),
+        ]
+    })
+    _word_add_table(doc, resume)
+
+    # 2. Dictionnaire des variables
+    doc.add_heading("2. Dictionnaire des variables", level=1)
+    _word_add_table(doc, dictionnaire_modifie)
+
+    # 3. Résultats descriptifs
+    doc.add_heading("3. Résultats statistiques descriptifs", level=1)
+
+    qual_closed = dictionnaire_modifie[
+        (dictionnaire_modifie["Type d'analyse"].isin(["Qualitative", "Qualitative codée"])) &
+        (dictionnaire_modifie["Type de question"] == "Question fermée")
+    ]["Variable"].tolist()
+
+    if qual_closed:
+        doc.add_heading("3.1 Variables qualitatives", level=2)
+        for variable in qual_closed:
+            serie = df_nettoye[variable].dropna()
+            if serie.empty:
+                continue
+            freq = serie.astype(str).value_counts(dropna=False).reset_index()
+            freq.columns = ["Modalité", "Effectif"]
+            freq["Pourcentage"] = (freq["Effectif"] / len(serie) * 100).round(2)
+            _word_add_table(doc, freq, title=variable, max_rows=100)
+
+    quant_vars = dictionnaire_modifie[
+        dictionnaire_modifie["Type d'analyse"] == "Quantitative"
+    ]["Variable"].tolist()
+
+    if quant_vars:
+        doc.add_heading("3.2 Variables quantitatives", level=2)
+        for variable in quant_vars:
+            serie = pd.to_numeric(df_nettoye[variable], errors="coerce")
+            valide = serie.dropna()
+            if valide.empty:
+                continue
+            stats = pd.DataFrame({
+                "Indicateur": [
+                    "Effectif valide", "Valeurs manquantes", "Moyenne", "Médiane",
+                    "Écart-type", "Minimum", "Q1", "Q3", "Maximum"
+                ],
+                "Valeur": [
+                    len(valide),
+                    int(serie.isna().sum()),
+                    round(valide.mean(), 2),
+                    round(valide.median(), 2),
+                    round(valide.std(), 2),
+                    round(valide.min(), 2),
+                    round(valide.quantile(0.25), 2),
+                    round(valide.quantile(0.75), 2),
+                    round(valide.max(), 2),
+                ]
+            })
+            _word_add_table(doc, stats, title=variable)
+
+    # 4. Constats automatiques
+    doc.add_heading("4. Constats et interprétations descriptives", level=1)
+    if not tableau_constats.empty:
+        for _, row in tableau_constats.iterrows():
+            doc.add_heading(str(row["Variable"]), level=2)
+            p = doc.add_paragraph()
+            p.add_run("Type : ").bold = True
+            p.add_run(str(row["Type"]))
+            p = doc.add_paragraph()
+            p.add_run("Interprétation : ").bold = True
+            p.add_run(str(row["Interprétation"]))
+    else:
+        doc.add_paragraph("Aucun constat automatique n'est disponible.")
+
+    # 5. Questions ouvertes
+    doc.add_heading("5. Questions ouvertes et codification thématique", level=1)
+    if variables_ouvertes:
+        doc.add_paragraph(
+            "Les questions ouvertes sont traitées dans le module de codification "
+            "thématique. Les thèmes proposés automatiquement constituent une aide "
+            "à la structuration des réponses et doivent être validés avant leur "
+            "interprétation scientifique."
+        )
+        doc.add_paragraph(
+            "La présente version de l'export intègre le rappel méthodologique ; "
+            "l'intégration détaillée des codifications validées sera ajoutée dans "
+            "l'étape suivante de l'export professionnel."
+        )
+    else:
+        doc.add_paragraph("Aucune question ouverte n'est actuellement validée.")
+
+    # 6. Règles d'interprétation
+    doc.add_heading("6. Règles méthodologiques d'interprétation", level=1)
+    doc.add_paragraph(
+        "Une p-value inférieure à 0,05 indique que le résultat est statistiquement "
+        "significatif au seuil de 5 % retenu, sous les hypothèses du test utilisé. "
+        "Elle ne permet pas, à elle seule, d'établir une relation causale."
+    )
+    doc.add_paragraph(
+        "Les constats automatiques sont des formulations descriptives. Ils doivent "
+        "être vérifiés, contextualisés et complétés par l'interprétation du chercheur "
+        "avant leur intégration dans un mémoire, un article ou un rapport d'étude."
+    )
+
+    # 7. Annexe : aperçu des données nettoyées
+    doc.add_heading("7. Annexe — aperçu des données nettoyées", level=1)
+    _word_add_table(doc, df_nettoye.head(50), max_rows=50)
+
+    # Propriétés du document
+    doc.core_properties.title = "Rapport d'analyse statistique"
+    doc.core_properties.subject = "Analyse statistique automatisée"
+    doc.core_properties.author = "Assistant statistique"
+    doc.core_properties.comments = "Rapport généré automatiquement et à vérifier par l'utilisateur."
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+if st.button("Générer le rapport Word professionnel", type="primary", key="generer_rapport_word"):
+    try:
+        rapport_word = generer_rapport_word()
+        st.download_button(
+            label="Télécharger le rapport Word",
+            data=rapport_word,
+            file_name="rapport_analyse_statistique.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            key="telecharger_rapport_word"
+        )
+        st.success("Le rapport Word a été généré avec succès.")
+    except Exception as e:
+        st.error(f"Erreur lors de la génération du rapport Word : {e}")
+
