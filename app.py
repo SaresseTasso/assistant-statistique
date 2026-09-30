@@ -3256,349 +3256,917 @@ else:
                     "La proposition automatique des thèmes "
                     f"a rencontré une erreur : {e}"
                 )
-                # ============================================================
-# 12. GÉNÉRATION AUTOMATIQUE DE CONSTATS ET INTERPRÉTATION
 # ============================================================
 
-st.subheader("12. Génération automatique de constats et interprétation")
+# MODULE 12 — GÉNÉRATION AUTOMATIQUE DE CONSTATS
+
+# ET INTERPRÉTATIONS DESCRIPTIVES
+
+# ============================================================
+
+st.header("12. Génération automatique de constats et d'interprétations")
 
 st.write(
-    "Ce module présente d'abord les résultats statistiques, puis "
-    "propose une interprétation descriptive structurée. Les formulations "
-    "automatiques doivent être relues et contextualisées avant leur "
-    "utilisation dans un rapport scientifique."
+"Ce module produit automatiquement des constats descriptifs à partir "
+"des résultats statistiques. Les interprétations sont adaptées à la "
+"structure de chaque variable et tiennent compte du nombre de modalités, "
+"des écarts observés et des valeurs manquantes."
 )
 
-constats = []
-
-# ============================================================
-# 12.1 VARIABLES QUALITATIVES
 # ============================================================
 
-st.markdown("### 12.1 Variables qualitatives")
+# 12.1 FONCTIONS UTILITAIRES
 
-for _, ligne in dictionnaire_modifie.iterrows():
+# ============================================================
 
-    variable = ligne["Variable"]
-    type_analyse = ligne["Type d'analyse"]
-    type_question = ligne["Type de question"]
+def formater_pourcentage(valeur):
+"""Formate un pourcentage avec une décimale."""
+return f"{valeur:.1f}".replace(".", ",")
+
+def formater_nombre(valeur):
+"""Formate un nombre entier avec l'accord grammatical."""
+try:
+valeur = int(valeur)
+if valeur == 1:
+return "1 réponse"
+return f"{valeur} réponses"
+except Exception:
+return str(valeur)
+
+def nettoyer_nom_variable(nom):
+"""Nettoie légèrement le nom d'une variable."""
+return str(nom).strip().rstrip(" ?")
+
+def determiner_intensite(pourcentage):
+"""
+Détermine le niveau de domination d'une modalité.
+Ces seuils servent uniquement à adapter la formulation.
+"""
+if pourcentage >= 80:
+return "tres_forte"
+elif pourcentage >= 60:
+return "forte"
+elif pourcentage >= 50:
+return "majoritaire"
+elif pourcentage >= 40:
+return "moderee"
+else:
+return "faible"
+
+def phrase_modalite(nom, modalite, pourcentage, effectif):
+"""
+Construit une formulation descriptive simple.
+"""
+return (
+f"la modalité « {modalite} » représente "
+f"{formater_pourcentage(pourcentage)} % des réponses valides "
+f"({formater_nombre(effectif)})"
+)
+
+def analyser_ecart(pourcentage_1, pourcentage_2):
+"""
+Calcule l'écart entre deux proportions.
+"""
+return abs(pourcentage_1 - pourcentage_2)
+
+# ============================================================
+
+# 12.2 INTERPRÉTATION DES VARIABLES QUALITATIVES
+
+# ============================================================
+
+def generer_interpretation_qualitative(
+nom_variable,
+table_frequences,
+nombre_manquants=0
+):
+"""
+Génère une interprétation descriptive adaptée à la distribution
+d'une variable qualitative.
+
+Règles :
+- 2 modalités : comparaison directe ;
+- 3 à 5 modalités : toutes les modalités sont interprétées ;
+- 6 à 10 modalités : 3 principales modalités ;
+- plus de 10 modalités : 5 principales modalités ;
+- forte proportion de valeurs manquantes : avertissement ;
+- distribution équilibrée : formulation spécifique ;
+- forte domination d'une modalité : formulation spécifique.
+
+if table_frequences is None or table_frequences.empty:
+    return (
+        f"Aucune interprétation ne peut être produite pour "
+        f"« {nom_variable} » en raison de l'absence de réponses valides."
+    )
+
+# --------------------------------------------------------
+# Identification des colonnes
+# --------------------------------------------------------
+
+colonnes = list(table_frequences.columns)
+
+colonne_modalite = None
+colonne_effectif = None
+colonne_pourcentage = None
+
+for col in colonnes:
+    col_lower = str(col).lower()
 
     if (
-        type_analyse in types_qualitatifs
-        and type_question == "Question fermée"
-        and variable in df_nettoye.columns
+        "modal" in col_lower
+        or "valeur" in col_lower
+        or "réponse" in col_lower
+        or "reponse" in col_lower
     ):
+        colonne_modalite = col
 
-        serie = df_nettoye[variable]
+    if (
+        "effectif" in col_lower
+        or "nombre" in col_lower
+        or "count" in col_lower
+        or "fréquence" in col_lower
+        or "frequence" in col_lower
+    ):
+        colonne_effectif = col
 
-        frequences = (
-            serie
-            .dropna()
-            .value_counts()
-            .rename_axis("Modalité")
-            .reset_index(name="Effectif")
+    if "%" in str(col) or "pourcentage" in col_lower:
+        colonne_pourcentage = col
+
+# --------------------------------------------------------
+# Sécurité si les noms de colonnes sont différents
+# --------------------------------------------------------
+
+if colonne_modalite is None:
+    colonne_modalite = colonnes[0]
+
+if colonne_effectif is None and len(colonnes) > 1:
+    colonne_effectif = colonnes[1]
+
+if colonne_pourcentage is None and len(colonnes) > 2:
+    colonne_pourcentage = colonnes[2]
+
+# --------------------------------------------------------
+# Construction d'une table interne standardisée
+# --------------------------------------------------------
+
+donnees = pd.DataFrame()
+
+donnees["modalite"] = table_frequences[colonne_modalite].astype(str)
+
+if colonne_effectif is not None:
+    donnees["effectif"] = pd.to_numeric(
+        table_frequences[colonne_effectif],
+        errors="coerce"
+    ).fillna(0)
+
+else:
+    donnees["effectif"] = 0
+
+if colonne_pourcentage is not None:
+    donnees["pourcentage"] = pd.to_numeric(
+        table_frequences[colonne_pourcentage],
+        errors="coerce"
+    ).fillna(0)
+
+else:
+    total = donnees["effectif"].sum()
+
+    if total > 0:
+        donnees["pourcentage"] = (
+            donnees["effectif"] / total
+        ) * 100
+    else:
+        donnees["pourcentage"] = 0
+
+# --------------------------------------------------------
+# Suppression des éventuelles lignes sans modalité
+# --------------------------------------------------------
+
+donnees = donnees[
+    donnees["modalite"].str.strip().ne("")
+].copy()
+
+if donnees.empty:
+    return (
+        f"Aucune interprétation ne peut être produite pour "
+        f"« {nom_variable} »."
+    )
+
+# --------------------------------------------------------
+# Tri décroissant
+# --------------------------------------------------------
+
+donnees = donnees.sort_values(
+    by="pourcentage",
+    ascending=False
+).reset_index(drop=True)
+
+nombre_modalites = len(donnees)
+
+total_valide = int(donnees["effectif"].sum())
+
+# ========================================================
+# CAS 1 : UNE SEULE MODALITÉ
+# ========================================================
+
+if nombre_modalites == 1:
+
+    ligne = donnees.iloc[0]
+
+    texte = (
+        f"La distribution de « {nom_variable} » montre que "
+        f"{phrase_modalite(
+            nom_variable,
+            ligne['modalite'],
+            ligne['pourcentage'],
+            ligne['effectif']
+        )}."
+    )
+
+# ========================================================
+# CAS 2 : DEUX MODALITÉS
+# ========================================================
+
+elif nombre_modalites == 2:
+
+    m1 = donnees.iloc[0]
+    m2 = donnees.iloc[1]
+
+    ecart = analyser_ecart(
+        m1["pourcentage"],
+        m2["pourcentage"]
+    )
+
+    # ----------------------------------------------------
+    # Distribution relativement équilibrée
+    # ----------------------------------------------------
+
+    if ecart <= 10:
+
+        texte = (
+            f"La répartition des répondants selon « {nom_variable} » "
+            f"est relativement équilibrée. "
+            f"La modalité « {m1['modalite']} » représente "
+            f"{formater_pourcentage(m1['pourcentage'])} % des réponses "
+            f"valides, contre "
+            f"{formater_pourcentage(m2['pourcentage'])} % pour "
+            f"« {m2['modalite']} ». "
+            f"L'écart entre les deux modalités est de "
+            f"{formater_pourcentage(ecart)} points de pourcentage."
         )
 
-        if frequences.empty:
-            continue
+    # ----------------------------------------------------
+    # Une modalité est majoritaire
+    # ----------------------------------------------------
 
-        total_valide = int(frequences["Effectif"].sum())
+    else:
+
+        texte = (
+            f"La répartition des répondants selon « {nom_variable} » "
+            f"est dominée par la modalité « {m1['modalite']} », "
+            f"qui représente "
+            f"{formater_pourcentage(m1['pourcentage'])} % des réponses "
+            f"valides ({formater_nombre(m1['effectif'])}). "
+            f"À l'inverse, la modalité « {m2['modalite']} » représente "
+            f"{formater_pourcentage(m2['pourcentage'])} % "
+            f"({formater_nombre(m2['effectif'])}). "
+            f"L'écart entre les deux modalités est de "
+            f"{formater_pourcentage(ecart)} points de pourcentage."
+        )
+
+        # Cas de très forte domination
+        if m1["pourcentage"] >= 80:
+
+            texte = (
+                f"La distribution de « {nom_variable} » est très "
+                f"fortement dominée par la modalité "
+                f"« {m1['modalite']} », qui concerne "
+                f"{formater_pourcentage(m1['pourcentage'])} % "
+                f"des réponses valides "
+                f"({formater_nombre(m1['effectif'])}). "
+                f"La modalité « {m2['modalite']} » ne représente que "
+                f"{formater_pourcentage(m2['pourcentage'])} % "
+                f"des réponses."
+            )
+
+# ========================================================
+# CAS 3 À 5 MODALITÉS
+# ========================================================
+
+elif 3 <= nombre_modalites <= 5:
+
+    phrases = []
+
+    for i, (_, ligne) in enumerate(donnees.iterrows()):
+
+        modalite = ligne["modalite"]
+        pourcentage = ligne["pourcentage"]
+        effectif = ligne["effectif"]
+
+        if i == 0:
+
+            if pourcentage >= 80:
+
+                phrases.append(
+                    f"La distribution est très fortement dominée par "
+                    f"« {modalite} », qui représente "
+                    f"{formater_pourcentage(pourcentage)} % "
+                    f"des réponses valides "
+                    f"({formater_nombre(effectif)})."
+                )
+
+            elif pourcentage >= 50:
+
+                phrases.append(
+                    f"La modalité « {modalite} » est majoritaire, "
+                    f"avec {formater_pourcentage(pourcentage)} % "
+                    f"des réponses valides "
+                    f"({formater_nombre(effectif)})."
+                )
+
+            else:
+
+                phrases.append(
+                    f"La modalité « {modalite} » est la plus "
+                    f"représentée, avec "
+                    f"{formater_pourcentage(pourcentage)} % "
+                    f"des réponses valides "
+                    f"({formater_nombre(effectif)})."
+                )
+
+        elif i == 1:
+
+            phrases.append(
+                f"Elle est suivie de « {modalite} », "
+                f"qui représente "
+                f"{formater_pourcentage(pourcentage)} % "
+                f"({formater_nombre(effectif)})."
+            )
+
+        elif i == 2:
+
+            phrases.append(
+                f"« {modalite} » représente pour sa part "
+                f"{formater_pourcentage(pourcentage)} % "
+                f"des réponses "
+                f"({formater_nombre(effectif)})."
+            )
+
+        elif i == nombre_modalites - 1:
+
+            phrases.append(
+                f"Enfin, « {modalite} » constitue la modalité "
+                f"la moins représentée, avec "
+                f"{formater_pourcentage(pourcentage)} % "
+                f"({formater_nombre(effectif)})."
+            )
+
+        else:
+
+            phrases.append(
+                f"Par ailleurs, « {modalite} » représente "
+                f"{formater_pourcentage(pourcentage)} % "
+                f"des réponses "
+                f"({formater_nombre(effectif)})."
+            )
+
+    texte = " ".join(phrases)
+
+    # ----------------------------------------------------
+    # Ajout d'une synthèse lorsque possible
+    # ----------------------------------------------------
+
+    top_2 = donnees.head(2)["pourcentage"].sum()
+
+    if top_2 >= 70:
+
+        texte += (
+            f" Dans l'ensemble, les deux modalités les plus "
+            f"représentées regroupent "
+            f"{formater_pourcentage(top_2)} % des réponses valides."
+        )
+
+# ========================================================
+# PLUS DE 5 MODALITÉS
+# ========================================================
+
+else:
+
+    if nombre_modalites <= 10:
+        nombre_a_interpreter = 3
+    else:
+        nombre_a_interpreter = 5
+
+    principales = donnees.head(nombre_a_interpreter)
+
+    phrases = []
+
+    for i, (_, ligne) in enumerate(principales.iterrows()):
+
+        modalite = ligne["modalite"]
+        pourcentage = ligne["pourcentage"]
+        effectif = ligne["effectif"]
+
+        if i == 0:
+
+            phrases.append(
+                f"La modalité « {modalite} » est la plus représentée, "
+                f"avec {formater_pourcentage(pourcentage)} % "
+                f"des réponses valides "
+                f"({formater_nombre(effectif)})."
+            )
+
+        elif i == 1:
+
+            phrases.append(
+                f"Elle est suivie de « {modalite} », "
+                f"qui représente "
+                f"{formater_pourcentage(pourcentage)} % "
+                f"({formater_nombre(effectif)})."
+            )
+
+        elif i == 2:
+
+            phrases.append(
+                f"« {modalite} » arrive ensuite avec "
+                f"{formater_pourcentage(pourcentage)} % "
+                f"des réponses."
+            )
+
+        elif i == 3:
+
+            phrases.append(
+                f"Par ailleurs, « {modalite} » représente "
+                f"{formater_pourcentage(pourcentage)} % "
+                f"des réponses."
+            )
+
+        elif i == 4:
+
+            phrases.append(
+                f"Enfin, « {modalite} » représente "
+                f"{formater_pourcentage(pourcentage)} % "
+                f"des réponses."
+            )
+
+    texte = " ".join(phrases)
+
+    nombre_autres = nombre_modalites - nombre_a_interpreter
+
+    if nombre_autres > 0:
+
+        autres = donnees.iloc[nombre_a_interpreter:]
+
+        maximum_autres = autres["pourcentage"].max()
+
+        texte += (
+            f" Les {nombre_autres} autres modalités présentent "
+            f"des proportions inférieures ou égales à "
+            f"{formater_pourcentage(maximum_autres)} % et sont "
+            f"conservées dans le tableau complet."
+        )
+
+# ========================================================
+# VALEURS MANQUANTES
+# ========================================================
+
+if nombre_manquants > 0:
+
+    total_observations = total_valide + nombre_manquants
+
+    proportion_manquante = (
+        nombre_manquants / total_observations
+    ) * 100 if total_observations > 0 else 0
+
+    # Forte proportion de valeurs manquantes
+    if proportion_manquante >= 30:
+
+        texte += (
+            f" Toutefois, cette variable comporte "
+            f"{formater_nombre(nombre_manquants)} valeur(s) "
+            f"manquante(s), soit "
+            f"{formater_pourcentage(proportion_manquante)} % "
+            f"des observations. Les résultats doivent donc être "
+            f"interprétés avec prudence."
+        )
+
+    else:
+
+        texte += (
+            f" Par ailleurs, "
+            f"{formater_nombre(nombre_manquants)} "
+            f"présente(nt) une valeur manquante."
+        )
+
+return texte
+
+# ============================================================
+
+# 12.3 VARIABLES QUALITATIVES
+
+# ============================================================
+
+st.subheader("12.1 Constats et interprétations des variables qualitatives")
+
+constats_qualitatifs = []
+
+if "dictionnaire_modifie" in st.session_state:
+
+dictionnaire = st.session_state["dictionnaire_modifie"]
+
+for _, ligne_dict in dictionnaire.iterrows():
+
+    variable = ligne_dict["Variable"]
+    type_analyse = ligne_dict["Type d'analyse"]
+    type_question = ligne_dict["Type de question"]
+
+    if type_analyse not in [
+        "Qualitative",
+        "Qualitative codée"
+    ]:
+        continue
+
+    if type_question == "Question ouverte":
+        continue
+
+    if variable not in df_nettoye.columns:
+        continue
+
+    serie = df_nettoye[variable]
+
+    # ----------------------------------------------------
+    # Tableau de fréquences
+    # ----------------------------------------------------
+
+    frequences = (
+        serie.dropna()
+        .value_counts(dropna=False)
+        .reset_index()
+    )
+
+    if frequences.empty:
+        continue
+
+    frequences.columns = [
+        "Modalité",
+        "Effectif"
+    ]
+
+    total_valide = frequences["Effectif"].sum()
+
+    if total_valide > 0:
 
         frequences["Pourcentage"] = (
-            frequences["Effectif"]
-            / total_valide
-            * 100
-        ).round(2)
+            frequences["Effectif"] / total_valide
+        ) * 100
 
-        st.markdown(f"#### {variable}")
-        st.markdown("**Résultats statistiques**")
-        st.dataframe(
-            frequences,
-            use_container_width=True,
-            hide_index=True
-        )
+    else:
 
-        nb_modalites = len(frequences)
+        frequences["Pourcentage"] = 0
 
-        if nb_modalites <= 5:
-            selection = frequences.copy()
-        elif nb_modalites <= 10:
-            selection = frequences.head(3).copy()
-        else:
-            selection = frequences.head(5).copy()
+    nombre_manquants = int(serie.isna().sum())
 
-        morceaux = []
+    # ----------------------------------------------------
+    # Affichage
+    # ----------------------------------------------------
 
-        connecteurs = [
-            "Ainsi",
-            "Par ailleurs",
-            "En revanche",
-            "Dans une moindre mesure",
-            "Enfin"
-        ]
-
-        for i, (_, ligne_freq) in enumerate(
-            selection.iterrows()
-        ):
-
-            modalite = ligne_freq["Modalité"]
-            effectif = int(ligne_freq["Effectif"])
-            pourcentage = float(ligne_freq["Pourcentage"])
-
-            if i == 0:
-                debut = "La modalité"
-            else:
-                debut = connecteurs[min(i - 1, len(connecteurs) - 1)] + ", la modalité"
-
-            morceaux.append(
-                f"{debut} « {modalite} » représente "
-                f"{pourcentage:.1f} % des réponses valides "
-                f"({effectif} réponse(s))"
-            )
-
-        interpretation = (
-            f"Dans l'ensemble, la distribution de « {variable} » montre que "
-            + "; tandis que ".join(morceaux)
-            + "."
-        )
-
-        if nb_modalites > len(selection):
-            interpretation += (
-                " Les autres modalités représentent des proportions "
-                "plus faibles et sont conservées dans le tableau complet."
-            )
-
-        nb_manquants = int(serie.isna().sum())
-
-        if nb_manquants > 0:
-            interpretation += (
-                f" Par ailleurs, {nb_manquants} observation(s) "
-                "présente(nt) une valeur manquante."
-            )
-
-        st.markdown("**Interprétation**")
-        st.info(interpretation)
-
-        constats.append({
-            "Variable": variable,
-            "Type": "Qualitative",
-            "Résultats statistiques": frequences.to_string(index=False),
-            "Interprétation": interpretation
-        })
-
-# ============================================================
-# 12.2 VARIABLES QUANTITATIVES
-# ============================================================
-
-st.markdown("### 12.2 Variables quantitatives")
-
-for _, ligne in dictionnaire_modifie.iterrows():
-
-    variable = ligne["Variable"]
-
-    if (
-        ligne["Type d'analyse"] == "Quantitative"
-        and variable in df_nettoye.columns
-    ):
-
-        serie_originale = df_nettoye[variable]
-        serie = pd.to_numeric(
-            serie_originale,
-            errors="coerce"
-        )
-        valide = serie.dropna()
-
-        if valide.empty:
-            continue
-
-        moyenne = float(valide.mean())
-        mediane = float(valide.median())
-        ecart_type = float(valide.std())
-        minimum = float(valide.min())
-        q1 = float(valide.quantile(0.25))
-        q3 = float(valide.quantile(0.75))
-        maximum = float(valide.max())
-        nb_manquants = int(serie.isna().sum())
-
-        statistiques = pd.DataFrame({
-            "Indicateur": [
-                "Effectif valide",
-                "Valeurs manquantes",
-                "Moyenne",
-                "Médiane",
-                "Écart-type",
-                "Minimum",
-                "Q1",
-                "Q3",
-                "Maximum"
-            ],
-            "Valeur": [
-                len(valide),
-                nb_manquants,
-                round(moyenne, 2),
-                round(mediane, 2),
-                round(ecart_type, 2),
-                round(minimum, 2),
-                round(q1, 2),
-                round(q3, 2),
-                round(maximum, 2)
-            ]
-        })
-
-        st.markdown(f"#### {variable}")
-        st.markdown("**Résultats statistiques**")
-        st.dataframe(
-            statistiques,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        if moyenne > mediane:
-            phrase_centrale = (
-                "La moyenne est supérieure à la médiane, ce qui peut "
-                "traduire l'influence relative de valeurs élevées."
-            )
-        elif moyenne < mediane:
-            phrase_centrale = (
-                "La moyenne est inférieure à la médiane, ce qui peut "
-                "traduire l'influence relative de valeurs faibles."
-            )
-        else:
-            phrase_centrale = (
-                "La moyenne et la médiane sont identiques, indiquant "
-                "une position centrale similaire selon ces deux indicateurs."
-            )
-
-        interpretation = (
-            f"Dans l'ensemble, « {variable} » présente une moyenne de "
-            f"{moyenne:.2f} et une médiane de {mediane:.2f}. "
-            f"{phrase_centrale} "
-            f"Par ailleurs, 50 % des observations se situent entre "
-            f"{q1:.2f} et {q3:.2f}, tandis que l'ensemble des valeurs "
-            f"observées s'étend de {minimum:.2f} à {maximum:.2f}."
-        )
-
-        if nb_manquants > 0:
-            interpretation += (
-                f" Enfin, {nb_manquants} observation(s) présente(nt) "
-                "une valeur manquante ou non convertible."
-            )
-        else:
-            interpretation += (
-                " Enfin, toutes les observations disposent d'une valeur "
-                "numérique exploitable."
-            )
-
-        st.markdown("**Interprétation**")
-        st.info(interpretation)
-
-        constats.append({
-            "Variable": variable,
-            "Type": "Quantitative",
-            "Résultats statistiques": statistiques.to_string(index=False),
-            "Interprétation": interpretation
-        })
-
-# ============================================================
-# 12.3 QUESTIONS OUVERTES
-# ============================================================
-
-st.markdown("### 12.3 Questions ouvertes")
-
-variables_ouvertes = dictionnaire_modifie[
-    dictionnaire_modifie["Type de question"] == "Question ouverte"
-]["Variable"].tolist()
-
-if variables_ouvertes:
-    st.info(
-        "Les questions ouvertes sont traitées dans le module de "
-        "codification thématique. Une interprétation automatique du "
-        "texte brut n'est pas produite afin d'éviter de présenter une "
-        "similarité lexicale comme une conclusion scientifique."
+    st.markdown(
+        f"#### {nettoyer_nom_variable(variable)}"
     )
+
+    st.dataframe(
+        frequences,
+        use_container_width=True
+    )
+
+    # ----------------------------------------------------
+    # Interprétation
+    # ----------------------------------------------------
+
+    interpretation = generer_interpretation_qualitative(
+        nettoyer_nom_variable(variable),
+        frequences,
+        nombre_manquants
+    )
+
+    st.markdown("**Interprétation :**")
+
+    st.write(interpretation)
+
+    constats_qualitatifs.append({
+        "Variable": variable,
+        "Type": "Qualitative",
+        "Interprétation": interpretation
+    })
+
 else:
-    st.info("Aucune question ouverte validée dans le dictionnaire.")
-
-# ============================================================
-# 12.4 RÈGLE D'INTERPRÉTATION DES TESTS
-# ============================================================
-
-st.markdown("### 12.4 Interprétation des tests statistiques")
 
 st.info(
-    "Une p-value inférieure à 0,05 indique que le résultat est "
-    "statistiquement significatif au seuil de 5 % retenu, sous les "
-    "hypothèses du test utilisé. Elle ne permet pas, à elle seule, "
-    "d'établir une relation causale."
+    "Le dictionnaire des variables n'est pas disponible."
 )
 
 # ============================================================
-# 12.5 TABLEAU RÉCAPITULATIF ET EXPORT
+
+# 12.4 VARIABLES QUANTITATIVES
+
 # ============================================================
 
-st.markdown("### 12.5 Tableau récapitulatif des constats")
+st.subheader("12.2 Constats et interprétations des variables quantitatives")
 
-tableau_constats = pd.DataFrame(constats)
+constats_quantitatifs = []
 
-if not tableau_constats.empty:
+if "dictionnaire_modifie" in st.session_state:
+
+dictionnaire = st.session_state["dictionnaire_modifie"]
+
+for _, ligne_dict in dictionnaire.iterrows():
+
+    variable = ligne_dict["Variable"]
+    type_analyse = ligne_dict["Type d'analyse"]
+
+    if type_analyse != "Quantitative":
+        continue
+
+    if variable not in df_nettoye.columns:
+        continue
+
+    serie = pd.to_numeric(
+        df_nettoye[variable],
+        errors="coerce"
+    )
+
+    serie_valide = serie.dropna()
+
+    if serie_valide.empty:
+        continue
+
+    n_valide = len(serie_valide)
+    n_manquant = int(serie.isna().sum())
+
+    moyenne = serie_valide.mean()
+    mediane = serie_valide.median()
+    ecart_type = serie_valide.std()
+    minimum = serie_valide.min()
+    q1 = serie_valide.quantile(0.25)
+    q3 = serie_valide.quantile(0.75)
+    maximum = serie_valide.max()
+
+    iqr = q3 - q1
+
+    # ----------------------------------------------------
+    # Tableau descriptif complet
+    # ----------------------------------------------------
+
+    statistiques = pd.DataFrame({
+        "Indicateur": [
+            "Nombre valide",
+            "Valeurs manquantes",
+            "Moyenne",
+            "Médiane",
+            "Écart-type",
+            "Minimum",
+            "Q1",
+            "Q3",
+            "Maximum",
+            "Écart interquartile"
+        ],
+        "Valeur": [
+            n_valide,
+            n_manquant,
+            moyenne,
+            mediane,
+            ecart_type,
+            minimum,
+            q1,
+            q3,
+            maximum,
+            iqr
+        ]
+    })
+
+    st.markdown(
+        f"#### {nettoyer_nom_variable(variable)}"
+    )
 
     st.dataframe(
-        tableau_constats[
-            [
-                "Variable",
-                "Type",
-                "Interprétation"
-            ]
-        ],
-        use_container_width=True,
-        hide_index=True
+        statistiques,
+        use_container_width=True
     )
 
-    try:
-        buffer_constats = io.BytesIO()
+    # ----------------------------------------------------
+    # Interprétation quantitative
+    # ----------------------------------------------------
 
-        with pd.ExcelWriter(
-            buffer_constats,
-            engine="openpyxl"
-        ) as writer:
+    interpretation = (
+        f"Pour « {nettoyer_nom_variable(variable)} », "
+        f"{n_valide} observation(s) sont disponibles pour l'analyse. "
+        f"La moyenne est de {moyenne:.2f}, tandis que la médiane "
+        f"est de {mediane:.2f}. "
+        f"Les valeurs observées s'étendent de {minimum:.2f} "
+        f"à {maximum:.2f}."
+    )
 
-            tableau_constats.to_excel(
-                writer,
-                index=False,
-                sheet_name="Constats"
+    # Relation moyenne / médiane
+    difference_centrale = abs(moyenne - mediane)
+
+    if mediane != 0:
+
+        ecart_relatif = (
+            difference_centrale / abs(mediane)
+        ) * 100
+
+    else:
+
+        ecart_relatif = 0
+
+    if ecart_relatif <= 10:
+
+        interpretation += (
+            " La proximité entre la moyenne et la médiane "
+            "indique une distribution globalement centrée "
+            "autour de valeurs proches."
+        )
+
+    elif moyenne > mediane:
+
+        interpretation += (
+            " La moyenne étant supérieure à la médiane, "
+            "la distribution présente une tendance à être "
+            "tirée vers les valeurs élevées."
+        )
+
+    else:
+
+        interpretation += (
+            " La moyenne étant inférieure à la médiane, "
+            "la distribution présente une tendance à être "
+            "tirée vers les valeurs faibles."
+        )
+
+    # Dispersion
+    if mediane != 0:
+
+        dispersion_relative = (
+            iqr / abs(mediane)
+        ) * 100
+
+        if dispersion_relative < 25:
+
+            interpretation += (
+                " La dispersion centrale des observations "
+                "reste relativement limitée."
             )
 
-        st.download_button(
-            label="Télécharger les constats Excel",
-            data=buffer_constats.getvalue(),
-            file_name="constats_automatiques.xlsx",
-            mime=(
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            ),
-            key="telecharger_constats_final"
-        )
+        elif dispersion_relative < 50:
 
-    except Exception as e:
-        st.error(
-            f"Erreur lors de la préparation du fichier : {e}"
-        )
+            interpretation += (
+                " Les observations présentent une dispersion "
+                "centrale modérée."
+            )
 
-else:
-    st.info(
-        "Aucun constat automatique n'a pu être généré à partir "
-        "des variables actuellement validées."
+        else:
+
+            interpretation += (
+                " Les observations présentent une dispersion "
+                "centrale importante."
+            )
+
+    # Valeurs manquantes
+    if n_manquant > 0:
+
+        proportion_manquante = (
+            n_manquant / len(serie)
+        ) * 100
+
+        if proportion_manquante >= 30:
+
+            interpretation += (
+                f" Toutefois, {n_manquant} valeur(s) sont manquantes, "
+                f"soit {proportion_manquante:.1f} % des observations. "
+                f"Les résultats doivent donc être interprétés "
+                f"avec prudence."
+            )
+
+        else:
+
+            interpretation += (
+                f" Par ailleurs, {n_manquant} valeur(s) "
+                f"sont manquantes."
+            )
+
+    st.markdown("**Interprétation :**")
+
+    st.write(interpretation)
+
+    constats_quantitatifs.append({
+        "Variable": variable,
+        "Type": "Quantitative",
+        "Interprétation": interpretation
+    })
+
+# ============================================================
+
+# 12.5 QUESTIONS OUVERTES
+
+# ============================================================
+
+st.subheader("12.3 Interprétation des questions ouvertes")
+
+st.write(
+"Les questions ouvertes sont traitées dans le module de "
+"codification thématique. Une interprétation automatique du "
+"texte brut n'est pas produite afin d'éviter de présenter "
+"une similarité lexicale comme une conclusion scientifique. "
+"Les thèmes proposés automatiquement constituent une aide "
+"à la structuration des réponses et doivent être examinés "
+"et validés avant toute interprétation."
+)
+
+# ============================================================
+
+# 12.6 INTERPRÉTATION DES TESTS STATISTIQUES
+
+# ============================================================
+
+st.subheader("12.4 Interprétation des tests statistiques")
+
+st.write(
+"Une p-value inférieure à 0,05 indique que le résultat est "
+"statistiquement significatif au seuil de 5 % retenu, sous "
+"les hypothèses du test utilisé. La p-value ne permet toutefois "
+"pas, à elle seule, d'établir une relation causale. "
+"L'interprétation doit également tenir compte de la nature "
+"des variables, du test appliqué, de la taille des groupes "
+"et, lorsque cela est pertinent, de l'ampleur de l'association "
+"ou de l'effet observé."
+)
+
+# ============================================================
+
+# 12.7 SYNTHÈSE DES CONSTATS
+
+# ============================================================
+
+st.subheader("12.5 Synthèse des constats")
+
+tous_constats = (
+constats_qualitatifs +
+constats_quantitatifs
+)
+
+if tous_constats:
+
+df_constats = pd.DataFrame(tous_constats)
+
+st.dataframe(
+    df_constats,
+    use_container_width=True
+)
+
+# --------------------------------------------------------
+# Export Excel
+# --------------------------------------------------------
+
+output_constats = io.BytesIO()
+
+with pd.ExcelWriter(
+    output_constats,
+    engine="openpyxl"
+) as writer:
+
+    df_constats.to_excel(
+        writer,
+        sheet_name="Constats",
+        index=False
     )
 
-# ============================================================
-# 12.6 RAPPEL MÉTHODOLOGIQUE
+st.download_button(
+    label="Télécharger les constats et interprétations (Excel)",
+    data=output_constats.getvalue(),
+    file_name="constats_interpretations.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+else:
+
+st.info(
+    "Aucun constat automatique n'a pu être généré."
+)
+
 # ============================================================
 
-st.markdown("### 12.6 Rappel méthodologique")
+# 12.8 RAPPEL MÉTHODOLOGIQUE
 
-st.warning(
-    "Les constats automatiques sont des formulations descriptives. "
-    "Ils doivent être vérifiés, contextualisés et complétés par "
-    "l'interprétation du chercheur avant leur intégration dans un "
-    "mémoire, un article ou un rapport d'étude."
+# ============================================================
+
+st.subheader("12.6 Rappel méthodologique")
+
+st.info(
+"Les interprétations générées automatiquement sont des "
+"interprétations descriptives fondées sur les distributions "
+"observées. Elles ne remplacent pas l'analyse du chercheur "
+"ou de l'analyste. Toute conclusion doit être confrontée "
+"à la problématique, au contexte de l'étude, à la méthode "
+"d'échantillonnage, à la qualité des données et aux objectifs "
+"de l'analyse."
 )
