@@ -3691,6 +3691,13 @@ def generer_rapport_word():
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
 
+    # Le nom du fichier doit être défini dans la portée de la fonction.
+    # On récupère en priorité le nom conservé dans la session Streamlit.
+    nom_fichier = st.session_state.get(
+        "nom_fichier_actuel",
+        getattr(fichier, "name", "Fichier non spécifié")
+    )
+
     doc = Document()
 
     # Marges professionnelles
