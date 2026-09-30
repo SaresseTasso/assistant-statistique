@@ -1806,38 +1806,538 @@ else:
 st.subheader("12. Génération automatique de constats")
 
 st.write(
-    "Ce module transforme certains résultats statistiques "
-    "en constats descriptifs simples. Les constats générés "
-    "doivent être relus avant leur utilisation dans un rapport."
+    "Ce module rédige une interprétation descriptive de chaque variable "
+    "en tenant compte de sa structure (nombre de modalités, équilibre ou "
+    "domination de la répartition, valeurs manquantes, effectif). "
+    "Les constats générés doivent être relus avant leur utilisation "
+    "dans un rapport."
 )
 
+MOTS_NOMBRES = {
+    1: "une", 2: "deux", 3: "trois", 4: "quatre", 5: "cinq",
+    6: "six", 7: "sept", 8: "huit", 9: "neuf", 10: "dix",
+}
 
-def phrase_modalite_principale(variable, frequences, total, unite):
-    """Constat sur la modalité la plus fréquente, avec gestion des égalités."""
-    effectif_max = int(frequences.iloc[0])
-    en_tete = [str(m) for m in frequences[frequences == effectif_max].index]
-    pourcentage = effectif_max / total * 100
 
-    if len(en_tete) == 1:
-        return (
-            f"Pour la variable « {variable} », la modalité « {en_tete[0]} » "
-            f"est la plus fréquente, avec {effectif_max} réponse(s), soit "
-            f"{pourcentage:.1f} % {unite} (n = {total})."
+def fmt_pct(valeur):
+    """61.3 -> '61,3 %'"""
+    return f"{valeur:.1f}".replace(".", ",") + " %"
+
+
+def fmt_nb(valeur, decimales=2):
+    return f"{valeur:,.{decimales}f}".replace(",", "\u00a0").replace(".", ",")
+
+
+def fmt_valeur(valeur):
+    """Entier sans décimales, sinon 2 décimales avec virgule."""
+    if abs(valeur - round(valeur)) < 1e-9:
+        return f"{int(round(valeur)):,}".replace(",", "\u00a0")
+    return fmt_nb(valeur, 2)
+
+
+def pluriel(n, singulier, pluriel_):
+    return singulier if n <= 1 else pluriel_
+
+
+def liste_et(elements):
+    elements = list(elements)
+    if not elements:
+        return ""
+    if len(elements) == 1:
+        return elements[0]
+    return ", ".join(elements[:-1]) + " et " + elements[-1]
+
+
+def liste_modalites(modalites):
+    return liste_et([f"« {m} »" for m in modalites])
+
+
+def echapper_markdown(texte):
+    """Empêche Markdown d'interpréter *, _, $, etc. dans les libellés."""
+    return re.sub(r"([\\`*_$~#\[\]])", r"\\\1", str(texte))
+
+
+def regrouper_egalites(pourcentages):
+    """Série triée (décroissant) -> [(pct arrondi, [modalités à égalité])]."""
+    groupes = []
+    for modalite, valeur in pourcentages.items():
+        p = round(float(valeur), 1)
+        if groupes and groupes[-1][0] == p:
+            groupes[-1][1].append(str(modalite))
+        else:
+            groupes.append((p, [str(modalite)]))
+    return groupes
+
+
+def notes_manquants(manquants, total_obs, n_valid, deja_prudent=False):
+    """Phrases de précaution liées aux valeurs manquantes / à l'effectif."""
+    notes = []
+    taux = manquants / total_obs if total_obs else 0
+
+    if taux >= 0.5:
+        notes.append(
+            f"Toutefois, cette variable comporte {manquants} "
+            f"{pluriel(manquants, 'valeur manquante', 'valeurs manquantes')} "
+            f"sur {total_obs} observations ({fmt_pct(taux * 100)}). "
+            f"Les résultats reposent donc uniquement sur {n_valid} "
+            f"{pluriel(n_valid, 'réponse valide', 'réponses valides')} "
+            "et doivent être interprétés avec prudence."
+        )
+    elif taux >= 0.2:
+        notes.append(
+            f"Il convient de noter que {manquants} valeurs manquantes "
+            f"({fmt_pct(taux * 100)} des observations) ne sont pas prises "
+            f"en compte : les résultats reposent sur {n_valid} réponses "
+            "valides."
+        )
+    elif manquants > 0:
+        notes.append(
+            f"Les résultats sont calculés sur les {n_valid} réponses valides."
         )
 
-    liste = " », « ".join(en_tete)
+    if taux < 0.5 and n_valid < 30 and not deja_prudent:
+        notes.append(
+            f"L'effectif de réponses valides étant faible (n = {n_valid}), "
+            "ces proportions doivent être interprétées avec prudence."
+        )
+
+    return notes
+
+
+# ------------------------------------------------------------
+# Textes selon le nombre de modalités
+# ------------------------------------------------------------
+
+
+def texte_prudence(pourcentages, n_valid, manquants, total_obs, unite):
+    """Cas particulier : très forte proportion de valeurs manquantes."""
+    mot = MOTS_NOMBRES.get(n_valid, str(n_valid))
+    k = len(pourcentages)
+
+    intro = (
+        "Cette variable présente un nombre très élevé de valeurs "
+        f"manquantes : {manquants} "
+        f"{pluriel(manquants, 'observation', 'observations')} "
+        f"sur {total_obs}."
+    )
+
+    premiere = pourcentages.index[0]
+
+    if n_valid == 1:
+        detail = (
+            "Une seule réponse valide a été enregistrée, correspondant à "
+            f"la modalité « {premiere} »."
+        )
+    else:
+        dispo = f"Seules {mot} réponses valides ont été enregistrées"
+        valeurs = [round(float(v), 1) for v in pourcentages.values]
+
+        if k == 1:
+            detail = f"{dispo}, toutes correspondant à la modalité « {premiere} »."
+        elif k == n_valid and len(set(valeurs)) == 1:
+            detail = (
+                f"{dispo}, chacune représentant {fmt_pct(valeurs[0])} "
+                "des réponses valides."
+            )
+        elif k <= 3:
+            elements = [
+                f"« {m} » ({fmt_pct(float(v))})" for m, v in pourcentages.items()
+            ]
+            detail = f"{dispo}, réparties comme suit : {liste_et(elements)}."
+        else:
+            elements = [
+                f"« {m} » ({fmt_pct(float(v))})"
+                for m, v in list(pourcentages.items())[:3]
+            ]
+            detail = (
+                f"{dispo} ; les modalités les plus fréquentes sont "
+                f"{liste_et(elements)}."
+            )
+
+    conclusion = (
+        "La distribution observée doit donc être interprétée avec prudence "
+        f"et ne permet pas de caractériser l'ensemble des {unite}."
+    )
+
+    return " ".join([intro, detail, conclusion])
+
+
+def corps_une_modalite(freq, n_valid):
     return (
-        f"Pour la variable « {variable} », les modalités « {liste} » sont "
-        f"à égalité en tête, avec {effectif_max} réponse(s) chacune, soit "
-        f"{pourcentage:.1f} % {unite} (n = {total})."
+        f"Toutes les réponses valides ({n_valid}) correspondent à une seule "
+        f"modalité : « {freq.index[0]} ». Aucune variation n'est observée "
+        "dans l'échantillon."
     )
 
 
-def afficher_liste_constats(liste):
-    if liste:
-        afficher_tableau(pd.DataFrame(liste)[["Variable", "Constat"]])
+def corps_deux_modalites(variable, groupes, unite):
+    # Égalité parfaite
+    if len(groupes) == 1:
+        p, modalites = groupes[0]
+        return (
+            f"La répartition des {unite} selon « {variable} » est "
+            "parfaitement équilibrée entre les deux modalités : "
+            f"{liste_modalites(modalites)} représentent chacune "
+            f"{fmt_pct(p)} des {unite}."
+        )
+
+    (p1, [a]), (p2, [b]) = groupes
+    ecart = round(p1 - p2, 1)
+    oui_non = {normaliser_cle(a), normaliser_cle(b)} in (
+        {"oui", "non"},
+        {"yes", "no"},
+    )
+
+    # Répartition équilibrée (écart inférieur à 20 points)
+    if ecart < 20:
+        return (
+            f"La répartition des {unite} selon « {variable} » est "
+            f"relativement équilibrée entre les deux modalités, avec "
+            f"{fmt_pct(p1)} pour « {a} » contre {fmt_pct(p2)} pour « {b} »."
+        )
+
+    # Très forte domination (80 % et plus)
+    if p1 >= 80:
+        if oui_non:
+            return (
+                f"Une très large majorité des {unite} ont répondu « {a} » "
+                f"à la question « {variable} » ({fmt_pct(p1)}). "
+                f"À l'inverse, seuls {fmt_pct(p2)} ont répondu « {b} »."
+            )
+        return (
+            f"La distribution de « {variable} » est très fortement dominée "
+            f"par la modalité « {a} », qui concerne {fmt_pct(p1)} des "
+            f"{unite}, contre seulement {fmt_pct(p2)} pour « {b} ». "
+            f"Cette distribution montre donc une forte prédominance de "
+            f"« {a} » dans l'échantillon."
+        )
+
+    # Majorité nette (entre 60 et 80 %)
+    if oui_non:
+        return (
+            f"La majorité des {unite} ont répondu « {a} » à la question "
+            f"« {variable} » ({fmt_pct(p1)}). À l'inverse, {fmt_pct(p2)} "
+            f"ont répondu « {b} », soit un écart de {fmt_nb(ecart, 1)} "
+            "points de pourcentage."
+        )
+    return (
+        f"La répartition des {unite} selon « {variable} » est "
+        f"majoritairement en faveur de la modalité « {a} » : elle concerne "
+        f"{fmt_pct(p1)} des {unite}, contre {fmt_pct(p2)} pour « {b} ». "
+        f"Elle dépasse ainsi « {b} » de {fmt_nb(ecart, 1)} points de "
+        "pourcentage."
+    )
+
+
+def corps_trois_a_cinq(variable, groupes, unite):
+    p0, m0 = groupes[0]
+    phrases = []
+
+    # Ouverture : dépend du poids de la première modalité
+    if len(m0) > 1:
+        phrases.append(
+            f"Les modalités {liste_modalites(m0)} sont les plus "
+            f"représentées pour « {variable} », avec chacune {fmt_pct(p0)} "
+            f"des {unite}."
+        )
+    elif p0 >= 65:
+        phrases.append(
+            f"La distribution de « {variable} » est largement dominée par "
+            f"la modalité « {m0[0]} », qui concerne {fmt_pct(p0)} des "
+            f"{unite}."
+        )
+    elif p0 >= 50:
+        phrases.append(
+            f"La modalité « {m0[0]} » est majoritaire pour « {variable} », "
+            f"avec {fmt_pct(p0)} des {unite}."
+        )
+    elif p0 >= 33:
+        phrases.append(
+            f"La modalité la plus représentée pour « {variable} » est "
+            f"« {m0[0]} », avec {fmt_pct(p0)} des {unite}."
+        )
     else:
+        phrases.append(
+            f"La répartition selon « {variable} » est relativement "
+            f"diversifiée : la modalité la plus représentée, « {m0[0]} », "
+            f"ne concerne que {fmt_pct(p0)} des {unite}."
+        )
+
+    suite = groupes[1:]
+    p1, m1 = suite[0]
+
+    # Deuxième niveau
+    if len(m0) == 1 and len(m1) == 1:
+        phrases.append(f"Elle est suivie de « {m1[0]} » ({fmt_pct(p1)}).")
+    elif len(m0) == 1:
+        phrases.append(
+            f"Elle est suivie des modalités {liste_modalites(m1)}, "
+            f"chacune représentée par {fmt_pct(p1)} des {unite}."
+        )
+    elif len(m1) == 1:
+        phrases.append(f"Vient ensuite la modalité « {m1[0]} » ({fmt_pct(p1)}).")
+    else:
+        phrases.append(
+            f"Viennent ensuite les modalités {liste_modalites(m1)}, "
+            f"chacune à {fmt_pct(p1)}."
+        )
+
+    # Niveaux suivants
+    reste = suite[1:]
+    if len(reste) == 1:
+        p, ms = reste[0]
+        if len(ms) > 1:
+            phrases.append(
+                f"Les modalités {liste_modalites(ms)} sont chacune "
+                f"représentées par {fmt_pct(p)} des {unite}."
+            )
+        elif p <= 0.6 * p1:
+            phrases.append(
+                f"En comparaison, « {ms[0]} » ne concerne que "
+                f"{fmt_pct(p)} des {unite}."
+            )
+        else:
+            phrases.append(
+                f"Enfin, « {ms[0]} » représente {fmt_pct(p)} des {unite}."
+            )
+    elif len(reste) > 1:
+        elements = [
+            f"« {ms[0]} » ({fmt_pct(p)})"
+            if len(ms) == 1
+            else f"{liste_modalites(ms)} ({fmt_pct(p)} chacune)"
+            for p, ms in reste
+        ]
+        phrases.append(
+            "Les autres modalités sont plus faiblement représentées : "
+            f"{liste_et(elements)}."
+        )
+
+    # Synthèse : uniquement si elle apporte une information
+    if len(m0) == 1 and len(m1) == 1 and p0 < 65:
+        cumul = round(p0 + p1, 1)
+        if cumul >= 66.7:
+            phrases.append(
+                f"Dans l'ensemble, les modalités « {m0[0]} » et « {m1[0]} » "
+                f"regroupent {fmt_pct(cumul)} des {unite}."
+            )
+
+    return " ".join(phrases)
+
+
+def corps_beaucoup_de_modalites(variable, pourcentages, nb_top, unite):
+    """6 à 10 modalités : 3 principales. Plus de 10 : 5 principales."""
+    k = len(pourcentages)
+    top = pourcentages.iloc[:nb_top]
+    reste = pourcentages.iloc[nb_top:]
+    cumul_top = float(top.sum())
+
+    if cumul_top >= 50:
+        ouverture = (
+            f"La répartition des {unite} selon « {variable} » est "
+            "relativement concentrée sur quelques modalités."
+        )
+    else:
+        ouverture = (
+            f"La répartition des {unite} selon « {variable} » est dispersée "
+            f"entre de nombreuses modalités ({k} au total)."
+        )
+
+    premier = f"« {top.index[0]} » constitue la modalité la plus représentée ({fmt_pct(float(top.iloc[0]))})"
+    suivants = [
+        f"« {m} » ({fmt_pct(float(v))})" for m, v in list(top.items())[1:]
+    ]
+    if len(suivants) == 2:
+        suite = f"suivie de {suivants[0]} et de {suivants[1]}"
+    else:
+        suite = f"suivie de {liste_et(suivants)}"
+
+    seuil = int(np.floor(float(reste.max()) / 5) * 5 + 5)
+    fin = (
+        f"Les {len(reste)} autres modalités regroupent "
+        f"{fmt_pct(float(reste.sum()))} des {unite} et présentent chacune "
+        f"une proportion inférieure à {seuil} %."
+    )
+
+    return " ".join([ouverture, f"{premier}, {suite}.", fin])
+
+
+def corps_reponses_multiples(variable, pourcentages, nb_repondants, unite):
+    k = len(pourcentages)
+
+    if k == 1:
+        return (
+            f"Une seule modalité est citée pour « {variable} » : "
+            f"« {pourcentages.index[0]} », par {fmt_pct(float(pourcentages.iloc[0]))} "
+            f"des {unite}."
+        )
+
+    nb_top = 3 if k <= 10 else 5
+    top = pourcentages.iloc[:nb_top]
+    reste = pourcentages.iloc[nb_top:]
+
+    premier = (
+        f"La modalité citée le plus souvent pour « {variable} » est "
+        f"« {top.index[0]} » ({fmt_pct(float(top.iloc[0]))} des {unite})"
+    )
+    suivants = [
+        f"« {m} » ({fmt_pct(float(v))})" for m, v in list(top.items())[1:]
+    ]
+    if len(suivants) == 2:
+        suite = f"suivie de {suivants[0]} et de {suivants[1]}"
+    else:
+        suite = f"suivie de {liste_et(suivants)}"
+
+    phrases = [f"{premier}, {suite}."]
+
+    if len(reste) == 1:
+        seuil = int(np.floor(float(reste.max()) / 5) * 5 + 5)
+        phrases.append(
+            f"La dernière modalité (« {reste.index[0]} ») est citée par "
+            f"moins de {seuil} % des {unite}."
+        )
+    elif len(reste) > 1:
+        seuil = int(np.floor(float(reste.max()) / 5) * 5 + 5)
+        phrases.append(
+            f"Les {len(reste)} autres modalités sont citées chacune par "
+            f"moins de {seuil} % des {unite}."
+        )
+
+    phrases.append(
+        "Les réponses étant multiples, la somme des pourcentages peut "
+        "dépasser 100 %."
+    )
+
+    return " ".join(phrases)
+
+
+# ------------------------------------------------------------
+# Fonction principale : variables qualitatives
+# ------------------------------------------------------------
+
+
+def interpreter_qualitative(variable, freq, n_valid, total_obs,
+                            exclusif=True, unite="répondants"):
+    """Rédige un paragraphe d'interprétation adapté à la structure de la
+    variable. freq : effectifs par modalité, triés par ordre décroissant."""
+    manquants = total_obs - n_valid
+    taux = manquants / total_obs if total_obs else 0
+
+    if n_valid == 0:
+        return (
+            "Aucune réponse valide n'a été enregistrée pour cette variable "
+            f"({manquants} valeurs manquantes) : aucune interprétation "
+            "n'est possible."
+        )
+
+    pourcentages = freq / n_valid * 100
+    k = len(freq)
+
+    # Cas particulier : quasi-absence de données
+    if taux >= 0.8 or (taux >= 0.5 and n_valid < 10):
+        return texte_prudence(pourcentages, n_valid, manquants, total_obs, unite)
+
+    # Variable qui ressemble à un identifiant ou à du texte libre
+    if k > 20 and k > 0.8 * n_valid:
+        return (
+            f"Cette variable comporte {k} modalités différentes pour "
+            f"{n_valid} réponses valides : elle ressemble à un identifiant "
+            "ou à une réponse libre. Une interprétation par fréquences "
+            "est peu pertinente ; vérifiez son type dans le dictionnaire."
+        )
+
+    groupes = regrouper_egalites(pourcentages)
+
+    if not exclusif:
+        corps = corps_reponses_multiples(variable, pourcentages, n_valid, unite)
+    elif k == 1:
+        corps = corps_une_modalite(freq, n_valid)
+    elif k == 2:
+        corps = corps_deux_modalites(variable, groupes, unite)
+    elif k <= 5:
+        corps = corps_trois_a_cinq(variable, groupes, unite)
+    elif k <= 10:
+        corps = corps_beaucoup_de_modalites(variable, pourcentages, 3, unite)
+    else:
+        corps = corps_beaucoup_de_modalites(variable, pourcentages, 5, unite)
+
+    return " ".join([corps] + notes_manquants(manquants, total_obs, n_valid))
+
+
+# ------------------------------------------------------------
+# Fonction principale : variables quantitatives
+# ------------------------------------------------------------
+
+
+def interpreter_quantitative(variable, serie, total_obs):
+    n = len(serie)
+    manquants = total_obs - n
+    taux = manquants / total_obs if total_obs else 0
+
+    if n == 0:
+        return (
+            "Aucune valeur numérique valide n'est disponible pour cette "
+            "variable : aucune interprétation n'est possible."
+        )
+
+    if taux >= 0.8 or (taux >= 0.5 and n < 10):
+        return (
+            "Cette variable présente un nombre très élevé de valeurs "
+            f"manquantes : {manquants} observations sur {total_obs}. "
+            f"Seules {n} valeurs valides sont disponibles (moyenne : "
+            f"{fmt_valeur(serie.mean())}). Ces résultats doivent être "
+            "interprétés avec prudence et ne permettent pas de "
+            "caractériser l'ensemble des répondants."
+        )
+
+    moyenne, mediane, ecart_type = serie.mean(), serie.median(), serie.std()
+    minimum, maximum = serie.min(), serie.max()
+
+    phrases = [
+        f"Les valeurs de « {variable} » s'étendent de {fmt_valeur(minimum)} "
+        f"à {fmt_valeur(maximum)}, avec une moyenne de {fmt_nb(moyenne)} et "
+        f"une médiane de {fmt_valeur(mediane)} (n = {n})."
+    ]
+
+    if n >= 4:
+        phrases.append(
+            "La moitié centrale des observations se situe entre "
+            f"{fmt_valeur(serie.quantile(0.25))} et "
+            f"{fmt_valeur(serie.quantile(0.75))}."
+        )
+
+    if pd.isna(ecart_type) or ecart_type == 0:
+        phrases.append("Toutes les valeurs observées sont identiques.")
+    else:
+        asymetrie = (moyenne - mediane) / ecart_type
+        if asymetrie >= 0.15:
+            phrases.append(
+                "La moyenne étant supérieure à la médiane, la distribution "
+                "est étirée vers les valeurs élevées : quelques valeurs "
+                "hautes tirent la moyenne vers le haut."
+            )
+        elif asymetrie <= -0.15:
+            phrases.append(
+                "La moyenne étant inférieure à la médiane, la distribution "
+                "est étirée vers les valeurs basses : quelques valeurs "
+                "faibles tirent la moyenne vers le bas."
+            )
+        else:
+            phrases.append(
+                "La moyenne et la médiane étant proches, la distribution "
+                "apparaît plutôt symétrique."
+            )
+
+    return " ".join(phrases + notes_manquants(manquants, total_obs, n))
+
+
+def afficher_liste_constats(liste):
+    if not liste:
         st.info("Aucun constat pour cette catégorie.")
+        return
+
+    for element in liste:
+        st.markdown(f"**{echapper_markdown(element['Variable'])}**")
+        st.markdown(echapper_markdown(element["Constat"]))
 
 
 # ------------------------------------------------------------
@@ -1856,19 +2356,21 @@ for _, ligne in dictionnaire_modifie.iterrows():
     if variable not in df_nettoye.columns or type_analyse not in types_qualitatifs:
         continue
 
+    total_obs = len(df_nettoye)
+    serie = df_nettoye[variable].dropna()
+
     if type_question == "Question fermée":
-        serie = df_nettoye[variable].dropna()
-
         if len(serie) == 0:
-            continue
-
-        constat = phrase_modalite_principale(
-            variable, serie.value_counts(), len(serie), "des réponses valides"
-        )
+            paragraphe = interpreter_qualitative(
+                variable, pd.Series(dtype=float), 0, total_obs
+            )
+        else:
+            paragraphe = interpreter_qualitative(
+                variable, serie.value_counts(), len(serie), total_obs
+            )
 
     elif type_question == "Réponses multiples":
-        serie = df_nettoye[variable].dropna().astype(str)
-
+        serie = serie.astype(str)
         citations = [
             morceau.strip()
             for valeur in serie
@@ -1876,14 +2378,16 @@ for _, ligne in dictionnaire_modifie.iterrows():
             if morceau.strip()
         ]
 
-        if not citations or len(serie) == 0:
+        if not citations:
             continue
 
-        constat = phrase_modalite_principale(
+        # Pourcentages calculés sur le nombre de répondants
+        paragraphe = interpreter_qualitative(
             variable,
             pd.Series(citations).value_counts(),
             len(serie),
-            "des répondants (plusieurs réponses possibles)",
+            total_obs,
+            exclusif=False,
         )
 
     else:
@@ -1894,7 +2398,7 @@ for _, ligne in dictionnaire_modifie.iterrows():
             "Sous-section": "12.1",
             "Type": "Descriptif",
             "Variable": variable,
-            "Constat": constat,
+            "Constat": paragraphe,
         }
     )
 
@@ -1916,21 +2420,14 @@ for _, ligne in dictionnaire_modifie.iterrows():
 
     serie = pd.to_numeric(df_nettoye[variable], errors="coerce").dropna()
 
-    if len(serie) == 0:
-        continue
-
-    constat = (
-        f"Pour « {variable} », la moyenne est de {serie.mean():.2f}, "
-        f"la médiane de {serie.median():.2f}, avec des valeurs comprises "
-        f"entre {serie.min():.2f} et {serie.max():.2f} (n = {len(serie)})."
-    )
-
     constats_quanti.append(
         {
             "Sous-section": "12.2",
             "Type": "Descriptif",
             "Variable": variable,
-            "Constat": constat,
+            "Constat": interpreter_quantitative(
+                variable, serie, len(df_nettoye)
+            ),
         }
     )
 
@@ -1958,7 +2455,7 @@ constats = constats_quali + constats_quanti
 
 if constats:
     tableau_constats = pd.DataFrame(constats)
-    afficher_tableau(tableau_constats)
+    st.table(tableau_constats[["Sous-section", "Variable", "Constat"]])
 else:
     st.info("Aucun constat automatique n'a pu être généré.")
 
